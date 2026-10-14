@@ -97,6 +97,7 @@ type Meeting struct {
 	Stage          int            `json:"stage"`
 	StageSeconds   []float64      `json:"stageSeconds"`
 	TimerStartedAt string         `json:"timerStartedAt"`
+	ChosenIssueIDs []string       `json:"chosenIssueIds"`
 	Attendees      []string       `json:"attendees"`
 	Segue          string         `json:"segue"`
 	Notes          string         `json:"notes"`
@@ -381,10 +382,12 @@ func validate(s State) error {
 			return bad("invalid to-do")
 		}
 	}
+	issues := map[string]Issue{}
 	for _, i := range s.Issues {
 		if !idOK(i.ID) || !textOK(i.Title) || !ownerOK(i.Owner) || !assigneesOK(i.Assignees) || len(i.Details) > 20000 || i.Priority < 1 || i.Priority > 3 || (i.Status != "open" && i.Status != "solved") || !timeOK(i.CreatedAt) {
 			return bad("invalid issue")
 		}
+		issues[i.ID] = i
 	}
 	for _, h := range s.Headlines {
 		if !idOK(h.ID) || !textOK(h.Title) || !assigneesOK(h.Assignees) || (h.Kind != "customer" && h.Kind != "employee") || !timeOK(h.CreatedAt) {
@@ -430,6 +433,26 @@ func validate(s State) error {
 			if !attendees[id] || rating < 1 || rating > 10 {
 				return bad("ratings must be from attending members and between 1 and 10")
 			}
+		}
+		meetingIssues := issues
+		requireOpen := true
+		if m.Snapshot != nil {
+			meetingIssues = map[string]Issue{}
+			for _, issue := range m.Snapshot.Issues {
+				meetingIssues[issue.ID] = issue
+			}
+			requireOpen = false
+		}
+		chosen := map[string]bool{}
+		if len(m.ChosenIssueIDs) > 3 {
+			return bad("a meeting can choose at most three issues")
+		}
+		for _, id := range m.ChosenIssueIDs {
+			issue, exists := meetingIssues[id]
+			if !exists || requireOpen && issue.Status != "open" || chosen[id] {
+				return bad("chosen meeting issues must be unique open issues")
+			}
+			chosen[id] = true
 		}
 		for _, seconds := range m.StageSeconds {
 			if seconds < 0 || math.IsNaN(seconds) || math.IsInf(seconds, 0) {

@@ -171,3 +171,25 @@ func TestCrossOriginAndStaticAssets(t *testing.T) {
 		}
 	}
 }
+
+func TestMeetingChosenIssuesValidation(t *testing.T) {
+	stamp := time.Now().UTC().Format(time.RFC3339Nano)
+	issues := []Issue{
+		{ID: "issue-1", Title: "First", Priority: 1, Status: "open"},
+		{ID: "issue-2", Title: "Second", Priority: 1, Status: "open"},
+		{ID: "issue-3", Title: "Third", Priority: 1, Status: "open"},
+		{ID: "issue-4", Title: "Fourth", Priority: 1, Status: "open"},
+	}
+	state := State{Name: "Team", Issues: issues, Meetings: []Meeting{{ID: "meeting", StartedAt: stamp, StageSeconds: make([]float64, 7), ChosenIssueIDs: []string{"issue-1", "issue-2", "issue-3"}, Ratings: map[string]int{}}}}
+	if err := validate(state); err != nil {
+		t.Fatalf("three chosen issues should be valid: %v", err)
+	}
+	state.Meetings[0].ChosenIssueIDs = append(state.Meetings[0].ChosenIssueIDs, "issue-4")
+	if err := validate(state); err == nil {
+		t.Fatal("more than three chosen issues accepted")
+	}
+	state.Meetings[0].ChosenIssueIDs = []string{"issue-1", "issue-1"}
+	if err := validate(state); err == nil {
+		t.Fatal("duplicate chosen issue accepted")
+	}
+}
