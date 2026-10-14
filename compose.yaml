@@ -3,6 +3,7 @@ services:
     build: .
     image: l10:latest
     restart: unless-stopped
+    pull_policy: never
     ports:
       - "8111:8111"
     environment:
