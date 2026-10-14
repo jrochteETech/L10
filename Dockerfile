@@ -7,7 +7,7 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /l10 .
 
 FROM alpine:3.23
 RUN addgroup -g 10001 l10 && adduser -D -u 10001 -G l10 l10 && mkdir /data && chown l10:l10 /data
-COPY --from=build /l10 /usr/local/bin/l10
+COPY --from=build --chmod=0755 /l10 /usr/local/bin/l10
 USER 10001:10001
 ENV PORT=8111 DATA_DIR=/data
 EXPOSE 8111
