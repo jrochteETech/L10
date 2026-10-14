@@ -69,6 +69,9 @@ func TestAccountsTeamsTransfersAndPersistence(t *testing.T) {
 	var teams []State
 	admin.request("GET", "/api/teams", nil, 200, &teams)
 	source := teams[0]
+	if got := source.StageMinutes; len(got) != 7 || got[0] != 5 || got[5] != 60 {
+		t.Fatalf("unexpected default meeting times: %v", got)
+	}
 	member.request("GET", "/api/teams/"+source.ID+"/state", nil, 403, nil)
 	admin.request("PUT", "/api/teams/"+source.ID+"/members", map[string]any{"members": []string{root.ID, bob.ID}, "version": source.Version}, 200, &source)
 	var destination State
@@ -80,12 +83,16 @@ func TestAccountsTeamsTransfersAndPersistence(t *testing.T) {
 	source.Todos = append(source.Todos, Todo{ID: "todo", Title: "Follow up", Notes: "Include the revised proposal", Owner: bob.ID, Assignees: []string{root.ID, bob.ID}, Due: "2026-10-21"})
 	source.Issues = append(source.Issues, Issue{ID: "issue", Title: "Pipeline", LongTerm: true, Owner: bob.ID, Assignees: []string{bob.ID}, Priority: 1, Status: "open"})
 	source.Headlines = append(source.Headlines, Headline{ID: "headline", Title: "New customer", Kind: "customer", Assignees: []string{bob.ID}})
+	source.StageMinutes = []int{6, 7, 8, 9, 10, 45, 5}
 	old := clone(source)
 	admin.request("PUT", "/api/teams/"+source.ID+"/state", source, 200, &source)
 	admin.request("PUT", "/api/teams/"+source.ID+"/state", old, 409, nil)
 	bad := clone(source)
 	bad.Members = []Member{}
 	member.request("PUT", "/api/teams/"+source.ID+"/state", bad, 400, nil)
+	bad = clone(source)
+	bad.StageMinutes = []int{5, 5, 5, 5, 5, 0, 5}
+	admin.request("PUT", "/api/teams/"+source.ID+"/state", bad, 400, nil)
 	transfer := transferInput{Source: source.ID, Destination: destination.ID, Version: source.Version, DestinationVersion: destination.Version, Items: map[string][]string{"todos": {"todo"}}}
 	member.request("POST", "/api/transfer", transfer, 403, nil)
 	admin.request("POST", "/api/transfer", transfer, 200, nil)
@@ -104,7 +111,7 @@ func TestAccountsTeamsTransfersAndPersistence(t *testing.T) {
 		t.Fatal("failed transfer partially committed")
 	}
 	stamp := time.Now().UTC().Format(time.RFC3339Nano)
-	source.Meetings = append(source.Meetings, Meeting{ID: "meeting", StartedAt: stamp, StageSeconds: make([]float64, 7), Attendees: []string{bob.ID}, Ratings: map[string]int{bob.ID: 9}, TimerStartedAt: stamp})
+	source.Meetings = append(source.Meetings, Meeting{ID: "meeting", StartedAt: stamp, StageSeconds: make([]float64, 7), Attendees: []string{bob.ID}, Ratings: map[string]float64{bob.ID: 9.5}, TimerStartedAt: stamp})
 	admin.request("PUT", "/api/teams/"+source.ID+"/state", source, 200, &source)
 	transfer.Version = source.Version
 	transfer.Items = nil
@@ -144,6 +151,10 @@ func TestAccountsTeamsTransfersAndPersistence(t *testing.T) {
 	if !ok || len(saved.Meetings) != 1 || len(saved.Metrics) != 1 || saved.Rocks[0].Notes != "Coordinate the rollout" || !saved.Issues[0].LongTerm || saved.Todos[0].Notes != "Include the revised proposal" {
 		t.Fatal("data not persisted")
 	}
+	savedSource, ok := reopened.get(source.ID)
+	if !ok || savedSource.StageMinutes[5] != 45 {
+		t.Fatal("team meeting times not persisted")
+	}
 	var backup Database
 	admin.request("GET", "/api/export", nil, 200, &backup)
 	admin.request("POST", "/api/import", map[string]any{"version": backup.Version, "database": backup}, 200, nil)
@@ -180,7 +191,7 @@ func TestMeetingChosenIssuesValidation(t *testing.T) {
 		{ID: "issue-3", Title: "Third", Priority: 1, Status: "open"},
 		{ID: "issue-4", Title: "Fourth", Priority: 1, Status: "open"},
 	}
-	state := State{Name: "Team", Issues: issues, Meetings: []Meeting{{ID: "meeting", StartedAt: stamp, StageSeconds: make([]float64, 7), ChosenIssueIDs: []string{"issue-1", "issue-2", "issue-3"}, Ratings: map[string]int{}}}}
+	state := State{Name: "Team", Issues: issues, Meetings: []Meeting{{ID: "meeting", StartedAt: stamp, StageSeconds: make([]float64, 7), ChosenIssueIDs: []string{"issue-1", "issue-2", "issue-3"}, Ratings: map[string]float64{}}}}
 	if err := validate(state); err != nil {
 		t.Fatalf("three chosen issues should be valid: %v", err)
 	}
@@ -191,5 +202,27 @@ func TestMeetingChosenIssuesValidation(t *testing.T) {
 	state.Meetings[0].ChosenIssueIDs = []string{"issue-1", "issue-1"}
 	if err := validate(state); err == nil {
 		t.Fatal("duplicate chosen issue accepted")
+	}
+}
+
+func TestMeetingRatingValidation(t *testing.T) {
+	stamp := time.Now().UTC().Format(time.RFC3339Nano)
+	state := State{
+		Name:    "Team",
+		Members: []Member{{ID: "member", Name: "Member"}},
+		Meetings: []Meeting{{
+			ID:           "meeting",
+			StartedAt:    stamp,
+			StageSeconds: make([]float64, 7),
+			Attendees:    []string{"member"},
+			Ratings:      map[string]float64{"member": 9.5},
+		}},
+	}
+	if err := validate(state); err != nil {
+		t.Fatalf("rating with one decimal place should be valid: %v", err)
+	}
+	state.Meetings[0].Ratings["member"] = 9.55
+	if err := validate(state); err == nil {
+		t.Fatal("rating with more than one decimal place accepted")
 	}
 }

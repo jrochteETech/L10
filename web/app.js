@@ -10,6 +10,7 @@ const plusDays = days => { const d = new Date(); d.setDate(d.getDate()+days); re
 const dateLabel = value => value ? new Date(value.length === 10 ? `${value}T12:00:00` : value).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'}) : 'No due date';
 const shortDate = value => new Date(`${value}T12:00:00`).toLocaleDateString(undefined,{month:'short',day:'numeric'});
 const initials = name => name.split(/\s+/).filter(Boolean).slice(0,2).map(s=>s[0]).join('').toUpperCase();
+const defaultStageMinutes = [5,5,5,5,5,60,5];
 const stages = [
   {name:'Segue', minutes:5, description:'Share one personal and one professional good thing. Connect as people before getting down to business.'},
   {name:'Scorecard', minutes:5, description:'Review your weekly measurables. Report the numbers, flag anything off track, and move the discussion to the Issues List.'},
@@ -23,6 +24,11 @@ const navigation = [ ['overview','◈','Overview'], ['meeting','◷','L10 meetin
 let state, currentUser, teams = [], users = [], setupRequired = false, passwordRequired = true, saving = false, saveQueue = Promise.resolve(), filter = 'open', search = '', selectedIssue = '', selectedHistory = '', toastTimeout;
 const tableSorts = {};
 const activeMeeting = () => state.meetings.find(m=>!m.endedAt);
+const plannedMinutes = () => stages.reduce((total,stage)=>total+stage.minutes,0);
+function applyStageMinutes() {
+  const minutes=state?.stageMinutes?.length===stages.length?state.stageMinutes:defaultStageMinutes;
+  stages.forEach((stage,index)=>{stage.minutes=minutes[index];});
+}
 const route = () => location.hash.slice(1).split('/')[0] || 'overview';
 const memberName = (owner, members = state.members) => members.find(m=>m.id===owner)?.name || 'Unassigned';
 const ownerHTML = (owner, members = state.members) => `<span class="owner"><span class="avatar">${esc(initials(memberName(owner,members))) || '—'}</span>${esc(memberName(owner,members))}</span>`;
@@ -60,10 +66,11 @@ function mutate(change, message = 'Changes saved') {
       applyDrafts(next,captured);
       change(next);
       state = await api(`teams/${next.id}/state`, {method:'PUT', body:JSON.stringify(next)});
+      applyStageMinutes();
       render(); if (message) toast(message);
       return true;
     } catch (error) {
-      if (error.status === 409) { try { state = await api('state'); render(); } catch (_) {} }
+      if (error.status === 409) { try { state = await api('state'); applyStageMinutes(); render(); } catch (_) {} }
       if (error.status === 401) { $('#modal').close(); renderLogin(); }
       toast(error.message, true); return false;
     } finally { saving = false; updateSaveStatus(); }
@@ -88,7 +95,27 @@ function render() {
   const current = navigation.find(n=>n[0]===route()) ? route() : 'overview';
   const views = {overview:renderOverview, meeting:renderMeeting, scorecard:()=>renderScorecard(), rocks:()=>renderRocks(), todos:()=>renderTodos(), issues:()=>renderIssues(), headlines:()=>renderHeadlines(), history:renderHistory, settings:renderSettings};
   $('#app').innerHTML = `<div class="layout"><aside class="sidebar"><a class="brand" href="#overview"><img class="brand-mark" src="/E%20Tech%20Group%20-%20Mark%20-%20Full%20Color%20-%20Background.png" alt="E Tech Group"><span>Level Ten<small>MAKE EVERY WEEK COUNT</small></span></a><div class="team-selector"><label for="team-select" class="team-label">Active team</label><select id="team-select" aria-label="Switch team">${teams.map(t=>`<option value="${esc(t.id)}" ${state.id===t.id?'selected':''}>${esc(t.name)}</option>`).join('')}</select>${currentUser.role==='admin'?'<button class="text-btn" data-action="create-team">+ Create team</button>':''}</div><nav class="nav" aria-label="Main navigation">${navigation.map(([key,icon,label])=>`<a href="#${key}" class="${key===current?'active':''}" ${key===current?'aria-current="page"':''}><span class="nav-icon" aria-hidden="true">${icon}</span>${label}${key==='issues' && state.issues.some(i=>i.status==='open')?`<span class="nav-count">${state.issues.filter(i=>i.status==='open').length}</span>`:''}${key==='meeting' && activeMeeting()?'<span class="nav-count">LIVE</span>':''}</a>`).join('')}</nav><div class="sidebar-bottom"><div class="team-card"><strong>${esc(currentUser.name)}</strong><small>${currentUser.role==='admin'?'Administrator':'Team member'} · ${teams.length} teams</small></div></div></aside><main class="main"><div class="topbar"><div class="breadcrumb">${esc(state.name)} <span>/ ${esc(navigation.find(n=>n[0]===current)[2])}</span></div><div class="top-actions"><span id="save-status" class="save-status"></span><button class="icon-btn" data-action="refresh" aria-label="Refresh workspace" title="Refresh workspace">↻</button><button class="text-btn" data-action="logout">Sign out</button><span class="avatar" title="${esc(currentUser.name)}">${esc(initials(currentUser.name))}</span></div></div><div class="content">${views[current]()}<div class="footer-note">LEVEL TEN · Clarity. Accountability. Traction.</div></div></main></div>`;
-  decorateAssignments(); updateSaveStatus(); updateTimer();
+  decorateAssignments(); decoratePlannedTime(); decorateAgendaSettings(); updateSaveStatus(); updateTimer();
+}
+
+function decoratePlannedTime() {
+  if(route()==='overview') {
+    const eyebrow=$('.hero .eyebrow'),total=$('.hero-art strong');
+    if(eyebrow)eyebrow.textContent=`${plannedMinutes()} minutes. One focused team.`;
+    if(total)total.textContent=plannedMinutes();
+  }
+  if(route()==='meeting' && !activeMeeting()) {
+    const description=$('.hero p');
+    if(description)description.textContent=description.textContent.replace('A 90-minute meeting',`A ${plannedMinutes()}-minute meeting`);
+  }
+}
+
+function decorateAgendaSettings() {
+  if(route()!=='settings')return;
+  const grid=$('.settings-grid');if(!grid)return;
+  const section=document.createElement('section');section.className='card';
+  section.innerHTML=`<div class="card-head"><h2>Meeting section times</h2>${pill(`${plannedMinutes()} minutes planned`,'gray')}</div><div class="card-body"><form id="agenda-form"><div class="agenda-time-grid">${stages.map((stage,index)=>field(`stage-${index}`,stage.name,stage.minutes,'number','required min="1" max="180" step="1"')).join('')}</div><button class="btn" type="submit">Save section times</button></form><p class="hint">These times apply only to ${esc(state.name)}. Active meetings use changes immediately.</p></div>`;
+  grid.firstElementChild.insertAdjacentElement('afterend',section);
 }
 
 function decorateAssignments() {
@@ -185,7 +212,7 @@ function updateTimer() {
   const m=activeMeeting(), timer=$('#stage-timer'); if (!m || !timer) return;
   const remaining=stages[m.stage].minutes*60-meetingSeconds(m,m.stage);
   timer.textContent=clock(remaining); timer.classList.toggle('over',remaining<0);
-  const total=$('#total-time'); if(total) total.textContent=`${clock(stages.reduce((sum,_,i)=>sum+meetingSeconds(m,i),0))} elapsed · 90:00 planned`;
+  const total=$('#total-time'); if(total) total.textContent=`${clock(stages.reduce((sum,_,i)=>sum+meetingSeconds(m,i),0))} elapsed · ${clock(plannedMinutes()*60)} planned`;
 }
 function settleTimer(m) { if(m.timerStartedAt) { m.stageSeconds[m.stage] += Math.max(0,(Date.now()-Date.parse(m.timerStartedAt))/1000); m.timerStartedAt=''; } }
 
@@ -199,7 +226,7 @@ function renderMeeting() {
   else if(m.stage===3) body=`<div class="stage-content">${renderHeadlines(true)}</div>`;
   else if(m.stage===4) body=`<div class="stage-content">${renderTodos(true)}</div>`;
   else if(m.stage===5) body=`<div class="stage-content">${renderIssues(true)}<label class="field"><span>Meeting decisions & notes</span><textarea id="meeting-notes" rows="4" placeholder="Decisions, context, and anything to remember…">${esc(m.notes)}</textarea></label>${action('save-meeting-notes','Save meeting notes')}</div>`;
-  else body=`<div class="stage-content"><div class="callout"><strong>Close the loop.</strong> Review the action owners and deadlines, decide what needs to be communicated, and rate the quality of this meeting. Discuss any rating below 8.</div><h3>Action recap</h3>${todosTable(state.todos.filter(t=>!t.done))}<label class="field"><span>Cascading messages</span><textarea id="meeting-messages" rows="3" placeholder="What needs to be shared, with whom, and by whom?">${esc(m.messages)}</textarea></label><label class="field"><span>Final meeting notes</span><textarea id="meeting-final-notes" rows="3">${esc(m.notes)}</textarea></label><h3>Rate this meeting</h3>${m.attendees.length?m.attendees.map(owner=>`<label class="rating-row">${ownerHTML(owner)}<select class="input" data-rating="${esc(owner)}" aria-label="Rating from ${esc(memberName(owner))}"><option value="">—</option>${Array.from({length:10},(_,i)=>`<option value="${i+1}" ${m.ratings[owner]===i+1?'selected':''}>${i+1}</option>`).join('')}</select></label>`).join(''):'<p class="hint">Select attendees in Segue to collect their ratings.</p>'}<div class="flex wrap">${action('save-conclusion','Save conclusion')}${pill(`Average: ${meetingAverage(m)} / 10`,'gray')}</div></div>`;
+  else body=`<div class="stage-content"><div class="callout"><strong>Close the loop.</strong> Review the action owners and deadlines, decide what needs to be communicated, and rate the quality of this meeting. Discuss any rating below 8.</div><h3>Action recap</h3>${todosTable(state.todos.filter(t=>!t.done))}<label class="field"><span>Cascading messages</span><textarea id="meeting-messages" rows="3" placeholder="What needs to be shared, with whom, and by whom?">${esc(m.messages)}</textarea></label><label class="field"><span>Final meeting notes</span><textarea id="meeting-final-notes" rows="3">${esc(m.notes)}</textarea></label><h3>Rate this meeting</h3>${m.attendees.length?m.attendees.map(owner=>`<label class="rating-row">${ownerHTML(owner)}<input class="input" type="number" min="1" max="10" step="0.1" inputmode="decimal" data-rating="${esc(owner)}" aria-label="Rating from ${esc(memberName(owner))}" value="${esc(m.ratings[owner] ?? '')}" placeholder="—"></label>`).join(''):'<p class="hint">Select attendees in Segue to collect their ratings.</p>'}<div class="flex wrap">${action('save-conclusion','Save conclusion')}${pill(`Average: ${meetingAverage(m)} / 10`,'gray')}</div></div>`;
   return `${header('Let’s make this a Level 10.',`Started ${new Date(m.startedAt).toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'})} · ${m.attendees.length} attendees`,pill('● Meeting in progress'))}<div class="meeting-layout"><aside class="card agenda" aria-label="Meeting agenda">${stages.map((stage,i)=>`<button data-stage="${i}" class="${m.stage===i?'active':''}" ${m.stage===i?'aria-current="step"':''}><span class="agenda-num">${i+1}</span><span><strong>${stage.name}</strong><small>${stage.minutes} minutes</small></span></button>`).join('')}<div class="timer-card"><div class="timer-label">Section time remaining</div><div id="stage-timer" class="timer">00:00</div>${action('toggle-timer',m.timerStartedAt?'Ⅱ Pause timer':'▶ Resume timer')}<div id="total-time" class="total-time"></div></div></aside><section class="card"><div class="stage-intro"><div class="eyebrow">Step ${m.stage+1} of 7 · ${stages[m.stage].minutes} minutes</div><h2>${stages[m.stage].name}</h2><p>${stages[m.stage].description}</p></div>${body}<div class="meeting-footer">${m.stage>0?action('previous-stage','← Previous'):pill('Start with connection','gray')}${m.stage<6?action('next-stage',`Next: ${stages[m.stage+1].name} →`,'',''):action('finish-meeting','Finish & save meeting ✓','','')}</div></section></div>`;
 }
 
@@ -230,7 +257,7 @@ async function loadWorkspace(preferred) {
   teams=await api('teams');users=currentUser.role==='admin'?await api('users'):[];
   const chosen=teams.find(t=>t.id===(preferred || localStorage.getItem('l10-team'))) || teams[0];
   state=chosen?await api(`teams/${chosen.id}/state`):null;
-  if(state)localStorage.setItem('l10-team',state.id);
+  if(state){applyStageMinutes();localStorage.setItem('l10-team',state.id);}
 }
 async function switchTeam(teamID) {
   const captured=captureDrafts();if(state && Object.keys(captured.drafts).length){const ok=await mutate(next=>applyDrafts(next,captured),'');if(!ok)return;}
@@ -438,12 +465,13 @@ document.addEventListener('change',event=>{
   if(target.dataset.rock)mutate(next=>{applyDrafts(next,captured);const r=next.rocks.find(r=>r.id===target.dataset.rock);if(r)r.status=target.value;},'');
   if(target.dataset.todo){const checked=target.checked;mutate(next=>{applyDrafts(next,captured);const t=next.todos.find(t=>t.id===target.dataset.todo);if(t){t.done=checked;t.completedAt=checked?now():'';}},'');}
   if(target.dataset.attendee){const checked=target.checked,member=target.dataset.attendee;mutate(next=>{applyDrafts(next,captured);const m=next.meetings.find(m=>!m.endedAt);if(!m)return;if(checked && !m.attendees.includes(member))m.attendees.push(member);else if(!checked){m.attendees=m.attendees.filter(id=>id!==member);delete m.ratings[member];}},'');}
-  if(target.dataset.rating){const value=target.value,member=target.dataset.rating;mutate(next=>{applyDrafts(next,captured);const m=next.meetings.find(m=>!m.endedAt);if(!m)return;if(value)m.ratings[member]=Number(value);else delete m.ratings[member];},'');}
+  if(target.dataset.rating){const value=target.value,number=Number(value),member=target.dataset.rating;if(value && (!Number.isFinite(number) || number<1 || number>10 || Math.abs(number*10-Math.round(number*10))>1e-9)){target.setCustomValidity('Enter a rating from 1 to 10 with at most one decimal place.');target.reportValidity();return;}target.setCustomValidity('');mutate(next=>{applyDrafts(next,captured);const m=next.meetings.find(m=>!m.endedAt);if(!m)return;if(value)m.ratings[member]=number;else delete m.ratings[member];},'');}
 });
 document.addEventListener('input',event=>{
   if(event.target.id==='issue-search'){const position=event.target.selectionStart;search=event.target.value;render();const input=$('#issue-search');input.focus();input.setSelectionRange(position,position);}
 });
 document.addEventListener('submit',event=>{
+  if(event.target.id==='agenda-form'){event.preventDefault();const form=new FormData(event.target),minutes=stages.map((_,index)=>Number(form.get(`stage-${index}`)));if(minutes.some(value=>!Number.isInteger(value) || value<1 || value>180)){toast('Section times must be whole minutes between 1 and 180.',true);return;}mutate(next=>{next.stageMinutes=minutes;});return;}
   if(event.target.id==='workspace-form'){event.preventDefault();const name=new FormData(event.target).get('name').trim();if(!name){toast('Enter a workspace name.',true);return;}mutate(next=>{next.name=name;});}
 });
 window.addEventListener('hashchange',async()=>{const captured=captureDrafts();if(state && Object.keys(captured.drafts).length){const ok=await mutate(next=>applyDrafts(next,captured),'');if(!ok)return;}filter='open';search='';selectedIssue='';if(route()!=='history')selectedHistory='';if(currentUser && state)render();window.scrollTo(0,0);});

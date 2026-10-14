@@ -13,7 +13,7 @@ func (a *application) listTeams(w http.ResponseWriter, r *http.Request) {
 	result := []map[string]any{}
 	for _, t := range a.store.db.Teams {
 		if canAccess(u, t) {
-			result = append(result, map[string]any{"id": t.ID, "name": t.Name, "members": t.Members, "version": t.Version})
+			result = append(result, map[string]any{"id": t.ID, "name": t.Name, "stageMinutes": t.StageMinutes, "members": t.Members, "version": t.Version})
 		}
 	}
 	writeJSON(w, 200, result)

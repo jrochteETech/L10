@@ -91,31 +91,32 @@ type Snapshot struct {
 	Headlines []Headline `json:"headlines"`
 }
 type Meeting struct {
-	ID             string         `json:"id"`
-	StartedAt      string         `json:"startedAt"`
-	EndedAt        string         `json:"endedAt"`
-	Stage          int            `json:"stage"`
-	StageSeconds   []float64      `json:"stageSeconds"`
-	TimerStartedAt string         `json:"timerStartedAt"`
-	ChosenIssueIDs []string       `json:"chosenIssueIds"`
-	Attendees      []string       `json:"attendees"`
-	Segue          string         `json:"segue"`
-	Notes          string         `json:"notes"`
-	Messages       string         `json:"messages"`
-	Ratings        map[string]int `json:"ratings"`
-	Snapshot       *Snapshot      `json:"snapshot"`
+	ID             string             `json:"id"`
+	StartedAt      string             `json:"startedAt"`
+	EndedAt        string             `json:"endedAt"`
+	Stage          int                `json:"stage"`
+	StageSeconds   []float64          `json:"stageSeconds"`
+	TimerStartedAt string             `json:"timerStartedAt"`
+	ChosenIssueIDs []string           `json:"chosenIssueIds"`
+	Attendees      []string           `json:"attendees"`
+	Segue          string             `json:"segue"`
+	Notes          string             `json:"notes"`
+	Messages       string             `json:"messages"`
+	Ratings        map[string]float64 `json:"ratings"`
+	Snapshot       *Snapshot          `json:"snapshot"`
 }
 type State struct {
-	Version   int64      `json:"version"`
-	Name      string     `json:"name"`
-	ID        string     `json:"id"`
-	Members   []Member   `json:"members"`
-	Metrics   []Metric   `json:"metrics"`
-	Rocks     []Rock     `json:"rocks"`
-	Todos     []Todo     `json:"todos"`
-	Issues    []Issue    `json:"issues"`
-	Headlines []Headline `json:"headlines"`
-	Meetings  []Meeting  `json:"meetings"`
+	Version      int64      `json:"version"`
+	Name         string     `json:"name"`
+	ID           string     `json:"id"`
+	StageMinutes []int      `json:"stageMinutes"`
+	Members      []Member   `json:"members"`
+	Metrics      []Metric   `json:"metrics"`
+	Rocks        []Rock     `json:"rocks"`
+	Todos        []Todo     `json:"todos"`
+	Issues       []Issue    `json:"issues"`
+	Headlines    []Headline `json:"headlines"`
+	Meetings     []Meeting  `json:"meetings"`
 }
 
 var errConflict = errors.New("workspace version conflict")
@@ -127,8 +128,10 @@ type store struct {
 	db   Database
 }
 
+func defaultStageMinutes() []int { return []int{5, 5, 5, 5, 5, 60, 5} }
+
 func newTeam(name string) State {
-	return State{ID: newID(), Version: 1, Name: name, Members: []Member{}, Metrics: []Metric{}, Rocks: []Rock{}, Todos: []Todo{}, Issues: []Issue{}, Headlines: []Headline{}, Meetings: []Meeting{}}
+	return State{ID: newID(), Version: 1, Name: name, StageMinutes: defaultStageMinutes(), Members: []Member{}, Metrics: []Metric{}, Rocks: []Rock{}, Todos: []Todo{}, Issues: []Issue{}, Headlines: []Headline{}, Meetings: []Meeting{}}
 }
 func newID() string {
 	var b [16]byte
@@ -184,6 +187,11 @@ func openStore(path string) (*store, error) {
 	}
 	if s.db.Teams == nil {
 		return nil, errors.New("data file is not a multi-team database")
+	}
+	for i := range s.db.Teams {
+		if len(s.db.Teams[i].StageMinutes) == 0 {
+			s.db.Teams[i].StageMinutes = defaultStageMinutes()
+		}
 	}
 	if err := validateDatabase(s.db); err != nil {
 		return nil, fmt.Errorf("read workspace: %w", err)
@@ -318,6 +326,14 @@ func validate(s State) error {
 	if strings.TrimSpace(s.Name) == "" || len(s.Name) > 200 {
 		return bad("workspace name is required (maximum 200 characters)")
 	}
+	if len(s.StageMinutes) != 0 && len(s.StageMinutes) != 7 {
+		return bad("meeting agenda must have seven section times")
+	}
+	for _, minutes := range s.StageMinutes {
+		if minutes < 1 || minutes > 180 {
+			return bad("meeting section times must be between 1 and 180 minutes")
+		}
+	}
 	if len(s.Members) > 100 || len(s.Metrics) > 300 || len(s.Rocks) > 1000 || len(s.Todos) > 10000 || len(s.Issues) > 10000 || len(s.Headlines) > 10000 || len(s.Meetings) > 2000 {
 		return bad("workspace item limit exceeded")
 	}
@@ -430,8 +446,8 @@ func validate(s State) error {
 			attendees[id] = true
 		}
 		for id, rating := range m.Ratings {
-			if !attendees[id] || rating < 1 || rating > 10 {
-				return bad("ratings must be from attending members and between 1 and 10")
+			if !attendees[id] || math.IsNaN(rating) || math.IsInf(rating, 0) || rating < 1 || rating > 10 || math.Abs(rating*10-math.Round(rating*10)) > 1e-9 {
+				return bad("ratings must be from attending members, between 1 and 10, and use at most one decimal place")
 			}
 		}
 		meetingIssues := issues
