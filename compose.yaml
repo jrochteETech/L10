@@ -14,8 +14,6 @@ services:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
     volumes:
       - l10_data:/data
-    security_opt:
-      - no-new-privileges:true
     cap_drop:
       - ALL
     read_only: true
