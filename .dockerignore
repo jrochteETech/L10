@@ -1,0 +1,7 @@
+.git
+data
+.env
+*.exe
+*.test
+coverage*
+README.md
