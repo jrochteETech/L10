@@ -128,7 +128,7 @@ function renderScorecard(embedded = false) {
 
 function rocksTable(rocks = state.rocks, editable = true, members = state.members) {
   if (!rocks.length) return empty('Focus on the big things','Define the most important outcomes for this quarter, with one accountable owner each.',editable?action('add-rock','Add a rock'):'');
-  return `<div class="table-wrap"><table><thead><tr><th>Quarterly rock</th><th>Owner</th><th>Due date</th><th>Status</th><th></th></tr></thead><tbody>${rocks.map(r=>`<tr><td class="table-title">${esc(r.title)}</td><td>${ownerHTML(r.owner,members)}</td><td>${dateLabel(r.due)}</td><td>${editable?`<select class="input" data-rock="${esc(r.id)}" aria-label="Status for ${esc(r.title)}"><option value="on-track" ${r.status==='on-track'?'selected':''}>On track</option><option value="off-track" ${r.status==='off-track'?'selected':''}>Off track</option><option value="done" ${r.status==='done'?'selected':''}>Complete</option></select>`:rockPill(r.status)}</td><td><div class="flex">${editable?`${action('rock-issue','→ IDS',r.id)}${editButtons('rock',r.id)}`:''}</div></td></tr>`).join('')}</tbody></table></div>`;
+  return `<div class="table-wrap"><table><thead><tr><th>Quarterly rock</th><th>Owner</th><th>Due date</th><th>Status</th><th></th></tr></thead><tbody>${rocks.map(r=>`<tr><td class="table-title">${esc(r.title)}${r.notes?`<div class="row-meta item-notes">${esc(r.notes)}</div>`:''}</td><td>${ownerHTML(r.owner,members)}</td><td>${dateLabel(r.due)}</td><td>${editable?`<select class="input" data-rock="${esc(r.id)}" aria-label="Status for ${esc(r.title)}"><option value="on-track" ${r.status==='on-track'?'selected':''}>On track</option><option value="off-track" ${r.status==='off-track'?'selected':''}>Off track</option><option value="done" ${r.status==='done'?'selected':''}>Complete</option></select>`:rockPill(r.status)}</td><td><div class="flex">${editable?`${action('rock-issue','→ IDS',r.id)}${editButtons('rock',r.id)}`:''}</div></td></tr>`).join('')}</tbody></table></div>`;
 }
 function renderRocks(embedded = false) {
   const done=state.rocks.filter(r=>r.status==='done').length;
@@ -137,7 +137,7 @@ function renderRocks(embedded = false) {
 
 function todosTable(todos = state.todos, editable = true, members = state.members) {
   if (!todos.length) return empty('Nothing here yet','Turn your decisions into seven-day commitments with a clear owner and due date.',editable?action('add-todo','Add a to-do'):'');
-  return `<div class="table-wrap"><table><thead><tr><th>Commitment</th><th>Owner</th><th>Due date</th><th>Status</th><th></th></tr></thead><tbody>${todos.map(t=>`<tr><td class="table-title"><div class="flex">${editable?`<input class="check" type="checkbox" data-todo="${esc(t.id)}" ${t.done?'checked':''} aria-label="Complete ${esc(t.title)}">`:''}<span class="${t.done?'done-title':''}">${esc(t.title)}</span></div></td><td>${ownerHTML(t.owner,members)}</td><td>${dateLabel(t.due)}</td><td>${t.done?pill('Done'):t.due && t.due<today()?pill('Overdue','red'):pill('Open','gray')}</td><td>${editable?editButtons('todo',t.id):''}</td></tr>`).join('')}</tbody></table></div>`;
+  return `<div class="table-wrap"><table><thead><tr><th>Commitment</th><th>Owner</th><th>Due date</th><th>Status</th><th></th></tr></thead><tbody>${todos.map(t=>`<tr><td class="table-title"><div class="flex">${editable?`<input class="check" type="checkbox" data-todo="${esc(t.id)}" ${t.done?'checked':''} aria-label="Complete ${esc(t.title)}">`:''}<span class="${t.done?'done-title':''}">${esc(t.title)}</span></div>${t.notes?`<div class="row-meta item-notes">${esc(t.notes)}</div>`:''}</td><td>${ownerHTML(t.owner,members)}</td><td>${dateLabel(t.due)}</td><td>${t.done?pill('Done'):t.due && t.due<today()?pill('Overdue','red'):pill('Open','gray')}</td><td>${editable?editButtons('todo',t.id):''}</td></tr>`).join('')}</tbody></table></div>`;
 }
 function renderTodos(embedded = false) {
   const list = embedded?state.todos.filter(t=>!t.done || t.completedAt.slice(0,10)>=plusDays(-7)):state.todos.filter(t=>filter==='all' || (filter==='done'?t.done:!t.done));
@@ -146,7 +146,7 @@ function renderTodos(embedded = false) {
 
 function issuesList(issues, editable = true, members = state.members) {
   if (!issues.length) return empty('Make room for the real conversation','Capture issues here so you can stay focused during the rest of the agenda.',editable?action('add-issue','Add an issue'):'');
-  return issues.map(i=>`<div class="list-row"><span class="priority">P${i.priority}</span><div class="grow"><div class="row-title">${esc(i.title)}</div><div class="row-meta">${esc(memberName(i.owner,members))}${i.details?' · Has discussion notes':''}</div></div>${editable?`<div class="flex">${i.status==='open'?action('select-issue','Discuss',i.id):action('reopen-issue','Reopen',i.id)}${editButtons('issue',i.id)}</div>`:pill(i.status==='solved'?'Solved':'Open',i.status==='solved'?'':'gray')}</div>`).join('');
+  return issues.map(i=>`<div class="list-row"><span class="priority">P${i.priority}</span><div class="grow"><div class="row-title">${esc(i.title)}</div><div class="row-meta">${esc(memberName(i.owner,members))}${i.details?' · Has discussion notes':''}${i.longTerm?' · Long term':''}</div></div>${i.longTerm?pill('Long term','gray'):''}${editable?`<div class="flex">${i.status==='open'?action('select-issue','Discuss',i.id):action('reopen-issue','Reopen',i.id)}${editButtons('issue',i.id)}</div>`:pill(i.status==='solved'?'Solved':'Open',i.status==='solved'?'':'gray')}</div>`).join('');
 }
 function renderIssues(embedded = false) {
   const list=state.issues.filter(i=>(embedded?i.status==='open':filter==='all' || i.status===filter || (filter==='done' && i.status==='solved')) && (!search || `${i.title} ${i.details}`.toLowerCase().includes(search.toLowerCase()))).sort((a,b)=>a.priority-b.priority || a.createdAt.localeCompare(b.createdAt));
@@ -182,7 +182,7 @@ function renderMeeting() {
   const m=activeMeeting();
   if (!m) return `${header('Your Level 10 meeting','A consistent agenda. An accountable team. Every week.')}<section class="hero"><div><div class="eyebrow">The EOS Level 10 agenda</div><h2>Bring your team. Find your traction.</h2><p>A 90-minute meeting built around the things that matter: your numbers, your priorities, and the issues standing in your way.</p>${action('start-meeting','▶ Start a new meeting','','lime')}<div class="agenda-preview">${stages.map(s=>`<span>${s.name} · ${s.minutes}m</span>`).join('')}</div></div><div class="hero-art"><div><strong>10</strong><small>LEVEL UP</small></div></div></section><div class="card grid" style="">${empty('Come prepared','Before you begin, update your scorecard, review your rocks, and add the issues you want to solve.','<a class="btn secondary" href="#scorecard">Review scorecard →</a>')}</div>`;
   let body;
-  if(m.stage===0) body=`<div class="stage-content"><h3>Who’s in the room?</h3><div class="attendees">${state.members.map(member=>`<label class="attendee"><input class="check" type="checkbox" data-attendee="${esc(member.id)}" ${m.attendees.includes(member.id)?'checked':''}>${esc(member.name)}</label>`).join('') || '<a class="text-btn" href="#settings">Add your team members →</a>'}</div><label class="field"><span>Good news & opening notes</span><textarea id="meeting-segue" rows="7" placeholder="One personal and one professional good thing from each person…">${esc(m.segue)}</textarea></label>${action('save-segue','Save opening notes')}</div>`;
+  if(m.stage===0) body=`<div class="stage-content"><h3>Check in each person as they share</h3><div class="attendees">${state.members.map(member=>`<label class="attendee"><input class="check" type="checkbox" data-attendee="${esc(member.id)}" ${m.attendees.includes(member.id)?'checked':''}>${esc(member.name)}</label>`).join('') || '<a class="text-btn" href="#settings">Add your team members →</a>'}</div><label class="field"><span>Good news & opening notes</span><textarea id="meeting-segue" rows="7" placeholder="One personal and one professional good thing from each person…">${esc(m.segue)}</textarea></label>${action('save-segue','Save opening notes')}</div>`;
   else if(m.stage===1) body=`<div class="stage-content">${renderScorecard(true)}</div>`;
   else if(m.stage===2) body=`<div class="stage-content">${renderRocks(true)}</div>`;
   else if(m.stage===3) body=`<div class="stage-content">${renderHeadlines(true)}</div>`;
@@ -282,9 +282,9 @@ function editItem(type,itemID='') {
   let body;
   if(type==='member') {manageMembers();return;}
   if(type==='metric') body=field('name','Measurable',data.name,'text','required maxlength="500" autofocus')+ownerField(data.owner)+`<div class="form-grid">${field('goal','Weekly goal',data.goal??0,'number','required step="any"')}<label class="field"><span>Goal direction</span><select name="direction"><option value="gte" ${data.direction!=='lte'?'selected':''}>At least (≥)</option><option value="lte" ${data.direction==='lte'?'selected':''}>At most (≤)</option></select></label></div>`+field('unit','Unit (optional)',data.unit,'text','maxlength="30" placeholder="e.g. $, %, calls"');
-  if(type==='rock') body=field('title','Quarterly outcome',data.title,'text','required maxlength="500" autofocus')+ownerField(data.owner)+field('due','Due date',data.due||plusDays(90),'date')+`<label class="field"><span>Status</span><select name="status"><option value="on-track" ${data.status==='on-track'?'selected':''}>On track</option><option value="off-track" ${data.status==='off-track'?'selected':''}>Off track</option><option value="done" ${data.status==='done'?'selected':''}>Complete</option></select></label>`;
-  if(type==='todo') body=field('title','Next action',data.title,'text','required maxlength="500" autofocus')+ownerField(data.owner)+field('due','Due date',data.due||plusDays(7),'date','required');
-  if(type==='issue') body=field('title','What’s the issue?',data.title,'text','required maxlength="500" autofocus')+ownerField(data.owner)+`<label class="field"><span>Priority</span><select name="priority">${[1,2,3].map(p=>`<option value="${p}" ${(data.priority||2)===p?'selected':''}>${p} · ${['Highest','Normal','Lower'][p-1]}</option>`).join('')}</select></label><label class="field"><span>Context & discussion notes</span><textarea name="details" rows="4" maxlength="20000">${esc(data.details)}</textarea></label>`;
+  if(type==='rock') body=field('title','Quarterly outcome',data.title,'text','required maxlength="500" autofocus')+ownerField(data.owner)+field('due','Due date',data.due||plusDays(90),'date')+`<label class="field"><span>Status</span><select name="status"><option value="on-track" ${data.status==='on-track'?'selected':''}>On track</option><option value="off-track" ${data.status==='off-track'?'selected':''}>Off track</option><option value="done" ${data.status==='done'?'selected':''}>Complete</option></select></label><label class="field"><span>Notes</span><textarea name="notes" rows="4" maxlength="20000" placeholder="Context, milestones, or updates…">${esc(data.notes)}</textarea></label>`;
+  if(type==='todo') body=field('title','Next action',data.title,'text','required maxlength="500" autofocus')+ownerField(data.owner)+field('due','Due date',data.due||plusDays(7),'date','required')+`<label class="field"><span>Notes</span><textarea name="notes" rows="4" maxlength="20000" placeholder="Add context or follow-up details…">${esc(data.notes)}</textarea></label>`;
+  if(type==='issue') body=field('title','What’s the issue?',data.title,'text','required maxlength="500" autofocus')+ownerField(data.owner)+`<label class="field"><span>Priority</span><select name="priority">${[1,2,3].map(p=>`<option value="${p}" ${(data.priority||2)===p?'selected':''}>${p} · ${['Highest','Normal','Lower'][p-1]}</option>`).join('')}</select></label><label class="attendee"><input class="check" name="longTerm" type="checkbox" ${data.longTerm?'checked':''}>Long-term issue</label><label class="field"><span>Context & discussion notes</span><textarea name="details" rows="4" maxlength="20000">${esc(data.details)}</textarea></label>`;
   if(type==='headline') body=field('title','Headline',data.title,'text','required maxlength="500" autofocus')+`<label class="field"><span>Category</span><select name="kind"><option value="customer" ${data.kind!=='employee'?'selected':''}>Customer</option><option value="employee" ${data.kind==='employee'?'selected':''}>Employee</option></select></label>`;
   body+=assigneesField(data.assignees || (data.owner?[data.owner]:[]));
   openModal(`${item?'Edit':'Add'} ${type==='metric'?'measurable':type==='todo'?'to-do':type}`,body,async form=>{
@@ -292,7 +292,7 @@ function editItem(type,itemID='') {
     delete values.assignee; values.assignees=form.getAll('assignee');
     if(values.owner && !values.assignees.includes(values.owner))values.assignees.unshift(values.owner);
     if(type==='metric') { values.goal=Number(values.goal); if(!Number.isFinite(values.goal)) throw new Error('Enter a valid goal.'); }
-    if(type==='issue') values.priority=Number(values.priority);
+    if(type==='issue') { values.priority=Number(values.priority); values.longTerm=form.has('longTerm'); }
     return mutate(next=>{
       const list=next[collections[type]], current=list.find(i=>i.id===itemID);
       if(item && !current) throw new Error('This item was removed. Please refresh and try again.');
@@ -314,16 +314,13 @@ function deleteItem(type,itemID) {
   },'Item removed'),'Delete');
 }
 
-function startMeeting() {
+async function startMeeting() {
   if(activeMeeting()) { location.hash='meeting'; render(); return; }
-  openModal('Start your Level 10',`<p class="muted">Your 90-minute agenda starts with Segue. Select the team members attending today.</p><div class="attendees">${state.members.map(m=>`<label class="attendee"><input class="check" type="checkbox" name="attendees" value="${esc(m.id)}" checked>${esc(m.name)}</label>`).join('') || 'No team members yet. You can add them in Team & settings.'}</div>`,async form=>{
-    const attendees=form.getAll('attendees');
-    const ok=await mutate(next=>{
-      if(next.meetings.some(m=>!m.endedAt)) throw new Error('A meeting is already in progress. Refresh to resume it.');
-      next.meetings.push({id:id(),startedAt:now(),endedAt:'',stage:0,stageSeconds:[0,0,0,0,0,0,0],timerStartedAt:now(),attendees,segue:'',notes:'',messages:'',ratings:{},snapshot:null});
-    },'Meeting started. Let’s connect.');
-    if(ok) { location.hash='meeting'; render(); } return ok;
-  },'Start meeting');
+  const ok=await mutate(next=>{
+    if(next.meetings.some(m=>!m.endedAt)) throw new Error('A meeting is already in progress. Refresh to resume it.');
+    next.meetings.push({id:id(),startedAt:now(),endedAt:'',stage:0,stageSeconds:[0,0,0,0,0,0,0],timerStartedAt:now(),attendees:[],segue:'',notes:'',messages:'',ratings:{},snapshot:null});
+  },'Meeting started. Check people in as they share.');
+  if(ok) { location.hash='meeting'; render(); }
 }
 
 function captureDrafts() {

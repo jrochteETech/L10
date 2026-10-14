@@ -76,9 +76,9 @@ func TestAccountsTeamsTransfersAndPersistence(t *testing.T) {
 	member.request("GET", "/api/teams/"+source.ID+"/state", nil, 200, nil)
 	member.request("POST", "/api/teams", map[string]any{"name": "Unauthorized"}, 403, nil)
 	source.Metrics = append(source.Metrics, Metric{ID: "metric", Name: "Revenue", Owner: root.ID, Assignees: []string{root.ID, bob.ID}, Direction: "gte", Goal: 100, Values: map[string]float64{"2026-10-12": 120}})
-	source.Rocks = append(source.Rocks, Rock{ID: "rock", Title: "Launch", Owner: bob.ID, Assignees: []string{root.ID, bob.ID}, Status: "on-track", Due: "2026-12-31"})
-	source.Todos = append(source.Todos, Todo{ID: "todo", Title: "Follow up", Owner: bob.ID, Assignees: []string{root.ID, bob.ID}, Due: "2026-10-21"})
-	source.Issues = append(source.Issues, Issue{ID: "issue", Title: "Pipeline", Owner: bob.ID, Assignees: []string{bob.ID}, Priority: 1, Status: "open"})
+	source.Rocks = append(source.Rocks, Rock{ID: "rock", Title: "Launch", Notes: "Coordinate the rollout", Owner: bob.ID, Assignees: []string{root.ID, bob.ID}, Status: "on-track", Due: "2026-12-31"})
+	source.Todos = append(source.Todos, Todo{ID: "todo", Title: "Follow up", Notes: "Include the revised proposal", Owner: bob.ID, Assignees: []string{root.ID, bob.ID}, Due: "2026-10-21"})
+	source.Issues = append(source.Issues, Issue{ID: "issue", Title: "Pipeline", LongTerm: true, Owner: bob.ID, Assignees: []string{bob.ID}, Priority: 1, Status: "open"})
 	source.Headlines = append(source.Headlines, Headline{ID: "headline", Title: "New customer", Kind: "customer", Assignees: []string{bob.ID}})
 	old := clone(source)
 	admin.request("PUT", "/api/teams/"+source.ID+"/state", source, 200, &source)
@@ -91,7 +91,7 @@ func TestAccountsTeamsTransfersAndPersistence(t *testing.T) {
 	admin.request("POST", "/api/transfer", transfer, 200, nil)
 	admin.request("GET", "/api/teams/"+source.ID+"/state", nil, 200, &source)
 	admin.request("GET", "/api/teams/"+destination.ID+"/state", nil, 200, &destination)
-	if len(source.Todos) != 0 || len(destination.Todos) != 1 || len(destination.Todos[0].Assignees) != 2 || !canAccess(bob, destination) {
+	if len(source.Todos) != 0 || len(destination.Todos) != 1 || destination.Todos[0].Notes != "Include the revised proposal" || len(destination.Todos[0].Assignees) != 2 || !canAccess(bob, destination) {
 		t.Fatal("transfer lost data, assignments or membership")
 	}
 	member.request("GET", "/api/teams/"+destination.ID+"/state", nil, 200, nil)
@@ -141,7 +141,7 @@ func TestAccountsTeamsTransfersAndPersistence(t *testing.T) {
 		t.Fatal(err)
 	}
 	saved, ok := reopened.get(destination.ID)
-	if !ok || len(saved.Meetings) != 1 || len(saved.Metrics) != 1 {
+	if !ok || len(saved.Meetings) != 1 || len(saved.Metrics) != 1 || saved.Rocks[0].Notes != "Coordinate the rollout" || !saved.Issues[0].LongTerm || saved.Todos[0].Notes != "Include the revised proposal" {
 		t.Fatal("data not persisted")
 	}
 	var backup Database

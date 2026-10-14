@@ -8,10 +8,11 @@ A self-hosted EOS Level 10 meeting workspace. Go backend; vanilla JavaScript, HT
 - Individual username/password accounts; users can belong to multiple teams.
 - Administrators create users and teams, manage memberships, reset passwords, and disable accounts. Members can collaborate in their assigned teams. Administrators can access all teams.
 - Multiple assigned users on every measurable, rock, to-do, issue, and headline. An optional primary owner provides accountability.
+- Notes on rocks and to-dos, plus a long-term classification for issues.
 - Move any individual item or concluded meeting report between accessible teams. Move all items from Team & settings. Transfers preserve assignments and add missing assignees to the destination team. Memberships in the source team stay intact.
 - Standard 90-minute L10 agenda: Segue (5), Scorecard (5), Rocks (5), Headlines (5), To-dos (5), IDS (60), Conclude (5).
 - Persistent section timer with pause/resume; prioritize issues, capture discussion notes, record resolutions, and create actions.
-- Attendance, cascading messages, individual 1–10 ratings, printable reports, and immutable historical workspace snapshots.
+- Attendance check-in during Segue, cascading messages, individual 1–10 ratings, printable reports, and immutable historical workspace snapshots.
 - Full JSON backup/restore, optimistic concurrency checking, atomic on-disk updates, and health checks.
 
 ## Run with Docker

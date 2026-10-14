@@ -48,6 +48,7 @@ type Metric struct {
 type Rock struct {
 	ID        string   `json:"id"`
 	Title     string   `json:"title"`
+	Notes     string   `json:"notes"`
 	Owner     string   `json:"owner"`
 	Assignees []string `json:"assignees"`
 	Due       string   `json:"due"`
@@ -56,6 +57,7 @@ type Rock struct {
 type Todo struct {
 	ID          string   `json:"id"`
 	Title       string   `json:"title"`
+	Notes       string   `json:"notes"`
 	Owner       string   `json:"owner"`
 	Assignees   []string `json:"assignees"`
 	Due         string   `json:"due"`
@@ -66,6 +68,7 @@ type Issue struct {
 	ID        string   `json:"id"`
 	Title     string   `json:"title"`
 	Details   string   `json:"details"`
+	LongTerm  bool     `json:"longTerm"`
 	Owner     string   `json:"owner"`
 	Assignees []string `json:"assignees"`
 	Priority  int      `json:"priority"`
@@ -369,12 +372,12 @@ func validate(s State) error {
 		}
 	}
 	for _, r := range s.Rocks {
-		if !idOK(r.ID) || !textOK(r.Title) || !ownerOK(r.Owner) || !assigneesOK(r.Assignees) || !dateOK(r.Due) || (r.Status != "on-track" && r.Status != "off-track" && r.Status != "done") {
+		if !idOK(r.ID) || !textOK(r.Title) || len(r.Notes) > 20000 || !ownerOK(r.Owner) || !assigneesOK(r.Assignees) || !dateOK(r.Due) || (r.Status != "on-track" && r.Status != "off-track" && r.Status != "done") {
 			return bad("invalid rock")
 		}
 	}
 	for _, t := range s.Todos {
-		if !idOK(t.ID) || !textOK(t.Title) || !ownerOK(t.Owner) || !assigneesOK(t.Assignees) || !dateOK(t.Due) || !timeOK(t.CompletedAt) {
+		if !idOK(t.ID) || !textOK(t.Title) || len(t.Notes) > 20000 || !ownerOK(t.Owner) || !assigneesOK(t.Assignees) || !dateOK(t.Due) || !timeOK(t.CompletedAt) {
 			return bad("invalid to-do")
 		}
 	}
