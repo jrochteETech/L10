@@ -58,12 +58,18 @@ func TestAccountsTeamsTransfersAndPersistence(t *testing.T) {
 	admin.request("POST", "/api/setup", map[string]string{"username": "admin", "name": "Administrator", "password": "strong-password-123"}, 201, &root)
 	admin.request("POST", "/api/setup", map[string]string{"username": "second", "name": "Second", "password": "strong-password-123"}, 400, nil)
 	var bob User
-	admin.request("POST", "/api/users", userInput{Name: "Bob", Username: "bob", Role: "member", Password: "bob-password-123"}, 201, &bob)
+	admin.request("POST", "/api/users", userInput{Name: "Bob", Username: "bob", Role: "member"}, 201, &bob)
 	if bob.PasswordHash != "" || bob.Salt != "" {
 		t.Fatal("password hashes leaked")
 	}
+	if !bob.MustChangePassword {
+		t.Fatal("new user was not required to change the temporary password")
+	}
 	member.request("POST", "/api/login", map[string]string{"username": "bob", "password": "wrong"}, 401, nil)
-	member.request("POST", "/api/login", map[string]string{"username": "BOB", "password": "bob-password-123"}, 200, nil)
+	member.request("POST", "/api/login", map[string]string{"username": "BOB", "password": defaultUserPassword}, 200, nil)
+	member.request("GET", "/api/teams", nil, 403, nil)
+	member.request("POST", "/api/password", map[string]string{"current": defaultUserPassword, "password": defaultUserPassword}, 400, nil)
+	member.request("POST", "/api/password", map[string]string{"current": defaultUserPassword, "password": "bob-password-123"}, 200, nil)
 	member.request("GET", "/api/users", nil, 403, nil)
 	member.request("GET", "/api/export", nil, 403, nil)
 	var teams []State

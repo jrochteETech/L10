@@ -89,7 +89,7 @@ func (a *application) routes() http.Handler {
 	mux.HandleFunc("POST /api/setup", a.setup)
 	mux.HandleFunc("POST /api/login", a.login)
 	mux.HandleFunc("POST /api/logout", a.logout)
-	mux.HandleFunc("POST /api/password", a.protected(a.changePassword))
+	mux.HandleFunc("POST /api/password", a.authenticated(a.changePassword))
 	mux.HandleFunc("GET /api/teams", a.protected(a.listTeams))
 	mux.HandleFunc("POST /api/teams", a.admin(a.createTeam))
 	mux.HandleFunc("PUT /api/teams/{team}/members", a.admin(a.setMembers))
@@ -148,7 +148,7 @@ func (a *application) currentUser(r *http.Request) (User, bool) {
 	}
 	return User{}, false
 }
-func (a *application) protected(next http.HandlerFunc) http.HandlerFunc {
+func (a *application) authenticated(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if _, ok := a.currentUser(r); !ok {
 			writeError(w, 401, "Please sign in to continue.")
@@ -156,6 +156,16 @@ func (a *application) protected(next http.HandlerFunc) http.HandlerFunc {
 		}
 		next(w, r)
 	}
+}
+func (a *application) protected(next http.HandlerFunc) http.HandlerFunc {
+	return a.authenticated(func(w http.ResponseWriter, r *http.Request) {
+		u, _ := a.currentUser(r)
+		if u.MustChangePassword {
+			writeError(w, 403, "Change your temporary password to continue.")
+			return
+		}
+		next(w, r)
+	})
 }
 func (a *application) admin(next http.HandlerFunc) http.HandlerFunc {
 	return a.protected(func(w http.ResponseWriter, r *http.Request) {
@@ -324,6 +334,10 @@ func (a *application) changePassword(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "Current password is incorrect")
 		return
 	}
+	if input.Password == input.Current {
+		writeError(w, 400, "New password must be different from the current password")
+		return
+	}
 	salt, hash, err := hashPassword(input.Password)
 	if err != nil {
 		writeError(w, 400, err.Error())
@@ -334,6 +348,7 @@ func (a *application) changePassword(w http.ResponseWriter, r *http.Request) {
 			if db.Users[i].ID == u.ID {
 				db.Users[i].Salt = salt
 				db.Users[i].PasswordHash = hash
+				db.Users[i].MustChangePassword = false
 				return nil
 			}
 		}

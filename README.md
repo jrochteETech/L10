@@ -6,7 +6,7 @@ A self-hosted EOS Level 10 meeting workspace. Go backend; vanilla JavaScript, HT
 
 - Multiple teams with independent scorecards, quarterly rocks, to-dos, headlines, Issues Lists, and meeting history.
 - Individual username/password accounts; users can belong to multiple teams.
-- Administrators create users and teams, manage memberships, reset passwords, and disable accounts. Members can collaborate in their assigned teams. Administrators can access all teams.
+- Administrators create users and teams, manage memberships, reset passwords, and disable accounts. New users receive the temporary password `password!!` and must replace it at first sign-in. Members can collaborate in their assigned teams. Administrators can access all teams.
 - Multiple assigned users on every measurable, rock, to-do, issue, and headline. An optional primary owner provides accountability.
 - Notes on rocks and to-dos, plus a long-term classification for issues.
 - Move any individual item or concluded meeting report between accessible teams. Move all items from Team & settings. Transfers preserve assignments and add missing assignees to the destination team. Memberships in the source team stay intact.
@@ -38,7 +38,7 @@ Put a reverse proxy in front of the app for HTTPS when accessing it over the int
 
 ## First steps
 
-1. Sign in as an administrator and create accounts in **Team & settings → User management**.
+1. Sign in as an administrator and create accounts in **Team & settings → User management**. Give each new user the temporary password `password!!`; the app requires them to choose a new password at first sign-in.
 2. Create teams and assign users using **Manage membership**. Users may belong to several teams.
 3. Add measurables, rocks, issues, headlines, and to-dos; select a primary owner and any additional assignees.
 4. Start an L10, follow the agenda, solve issues, and conclude to save a report.
@@ -62,7 +62,7 @@ Defaults: port `8111`, data directory `./data`. Override using `PORT` and `DATA_
 
 - Run one app instance per data volume. Persistence and concurrency control are designed for a single process.
 - Changes save to the server; notes have explicit Save buttons and also save on agenda transitions. Use Refresh to load changes made in another browser; concurrent edits return a conflict rather than silently overwrite data.
-- Sessions are in memory and expire after seven days. Server restarts require a new login. Changing passwords or editing accounts invalidates their existing sessions.
+- Sessions are in memory and expire after seven days. Server restarts require a new login. Changing passwords or editing accounts invalidates their existing sessions. Setting a user's temporary password requires them to replace it at their next sign-in.
 - Passwords are salted and hashed with PBKDF2-HMAC-SHA256 (600,000 iterations). Login/setup/password attempts are rate-limited.
 - Backup restore replaces all teams and accounts, invalidates sessions, and requires login with a restored account. Export a current backup first.
 - This is an independent implementation of the EOS Level 10 meeting workflow, not an official EOS product.

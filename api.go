@@ -248,12 +248,12 @@ func (a *application) createUser(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "Invalid user")
 		return
 	}
-	salt, hash, err := hashPassword(input.Password)
+	salt, hash, err := hashPassword(defaultUserPassword)
 	if err != nil {
-		writeError(w, 400, err.Error())
+		respondError(w, err)
 		return
 	}
-	u := User{ID: newID(), Name: strings.TrimSpace(input.Name), Username: strings.ToLower(strings.TrimSpace(input.Username)), Role: input.Role, Disabled: input.Disabled, Salt: salt, PasswordHash: hash}
+	u := User{ID: newID(), Name: strings.TrimSpace(input.Name), Username: strings.ToLower(strings.TrimSpace(input.Username)), Role: input.Role, Disabled: input.Disabled, MustChangePassword: true, Salt: salt, PasswordHash: hash}
 	if err := a.store.update(func(db *Database) error { db.Users = append(db.Users, u); return nil }); err != nil {
 		respondError(w, err)
 		return
@@ -289,6 +289,7 @@ func (a *application) updateUser(w http.ResponseWriter, r *http.Request) {
 			if hash != "" {
 				u.Salt = salt
 				u.PasswordHash = hash
+				u.MustChangePassword = true
 			}
 			result = *u
 			for j := range db.Teams {

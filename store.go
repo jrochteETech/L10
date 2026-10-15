@@ -22,13 +22,14 @@ type Member struct {
 	Name string `json:"name"`
 }
 type User struct {
-	ID           string `json:"id"`
-	Name         string `json:"name"`
-	Username     string `json:"username"`
-	Role         string `json:"role"`
-	Disabled     bool   `json:"disabled"`
-	Salt         string `json:"salt,omitempty"`
-	PasswordHash string `json:"passwordHash,omitempty"`
+	ID                 string `json:"id"`
+	Name               string `json:"name"`
+	Username           string `json:"username"`
+	Role               string `json:"role"`
+	Disabled           bool   `json:"disabled"`
+	MustChangePassword bool   `json:"mustChangePassword"`
+	Salt               string `json:"salt,omitempty"`
+	PasswordHash       string `json:"passwordHash,omitempty"`
 }
 type Database struct {
 	Version int64   `json:"version"`
@@ -121,6 +122,8 @@ type State struct {
 
 var errConflict = errors.New("workspace version conflict")
 var errInvalid = errors.New("invalid workspace")
+
+const defaultUserPassword = "password!!"
 
 type store struct {
 	mu   sync.RWMutex

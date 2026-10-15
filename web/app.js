@@ -279,8 +279,9 @@ function manageMembers() {
 }
 function editUser(userID='') {
   const u=users.find(u=>u.id===userID);
-  openModal(u?'Edit user':'Create user',field('name','Full name',u?.name,'text','required maxlength="100"')+field('username','Username',u?.username,'text','required minlength="3" maxlength="80" pattern="[a-zA-Z0-9._@-]+"')+field('password',u?'New password (leave blank to keep current)':'Password','','password',`${u?'':'required'} minlength="10" maxlength="256" autocomplete="new-password"`)+`<label class="field"><span>Role</span><select name="role"><option value="member" ${u?.role!=='admin'?'selected':''}>Member — access assigned teams</option><option value="admin" ${u?.role==='admin'?'selected':''}>Administrator — manage all teams & users</option></select></label><label class="attendee"><input class="check" name="disabled" type="checkbox" ${u?.disabled?'checked':''}>Disable account</label><p class="hint">Usernames use letters, numbers, dots, dashes, underscores, or @. Passwords need at least 10 characters. Editing an account signs it out of all sessions.</p>`,async form=>{
-    await api(u?`users/${u.id}`:'users',{method:u?'PUT':'POST',body:JSON.stringify({name:form.get('name'),username:form.get('username'),password:form.get('password'),role:form.get('role'),disabled:form.has('disabled')})});
+  openModal(u?'Edit user':'Create user',field('name','Full name',u?.name,'text','required maxlength="100"')+field('username','Username',u?.username,'text','required minlength="3" maxlength="80" pattern="[a-zA-Z0-9._@-]+"')+(u?field('password','New temporary password (leave blank to keep current)','','password','minlength="10" maxlength="256" autocomplete="new-password"'):'')+`<label class="field"><span>Role</span><select name="role"><option value="member" ${u?.role!=='admin'?'selected':''}>Member — access assigned teams</option><option value="admin" ${u?.role==='admin'?'selected':''}>Administrator — manage all teams & users</option></select></label><label class="attendee"><input class="check" name="disabled" type="checkbox" ${u?.disabled?'checked':''}>Disable account</label><p class="hint">${u?'Setting a temporary password requires the user to replace it at their next sign-in. Editing an account signs it out of all sessions.':'The temporary password is password!!. The user must replace it when they first sign in.'} Usernames use letters, numbers, dots, dashes, underscores, or @.</p>`,async form=>{
+    const input={name:form.get('name'),username:form.get('username'),role:form.get('role'),disabled:form.has('disabled')};if(u)input.password=form.get('password');
+    await api(u?`users/${u.id}`:'users',{method:u?'PUT':'POST',body:JSON.stringify(input)});
     if(u?.id===currentUser.id){state=null;currentUser=null;renderLogin();toast('Account updated. Please sign in again.');return;}
     await loadWorkspace(state?.id);render();toast('User saved');
   });
@@ -488,12 +489,22 @@ function renderLogin() {
   $('#app').innerHTML=`<div class="login"><div class="login-box"><div class="brand"><img class="brand-mark" src="/E%20Tech%20Group%20-%20Mark%20-%20Full%20Color%20-%20Background.png" alt="E Tech Group"><span>Level Ten<small>MAKE EVERY WEEK COUNT</small></span></div><h1>${setupRequired?'Set up your workspace.':'Welcome back.'}</h1><p>${setupRequired?'Create the first administrator account to get started.':'Sign in to your team’s meeting workspace.'}</p><form id="login-form">${setupRequired?field('name','Your name','','text','required maxlength="100" autocomplete="name"'):''}${field('username','Username','','text','required minlength="3" maxlength="80" autocomplete="username"')}${field('password','Password','','password',`required ${setupRequired?'minlength="10" autocomplete="new-password"':'autocomplete="current-password"'} maxlength="256"`)}<div id="login-error" class="form-error" role="alert"></div><button class="btn" type="submit">${setupRequired?'Create administrator →':'Sign in →'}</button></form></div></div>`;
   $('#login-form').addEventListener('submit',async event=>{
     event.preventDefault();const button=$('button',event.target);button.disabled=true;
-    try{currentUser=await api(setupRequired?'setup':'login',{method:'POST',body:JSON.stringify(Object.fromEntries(new FormData(event.target)))});setupRequired=false;await loadWorkspace();render();}
+    try{currentUser=await api(setupRequired?'setup':'login',{method:'POST',body:JSON.stringify(Object.fromEntries(new FormData(event.target)))});setupRequired=false;if(currentUser.mustChangePassword){renderRequiredPasswordChange();return;}await loadWorkspace();render();}
     catch(error){$('#login-error').textContent=error.message;}finally{button.disabled=false;}
   });
 }
+function renderRequiredPasswordChange() {
+  state=null;
+  $('#app').innerHTML=`<div class="login"><div class="login-box"><div class="brand"><img class="brand-mark" src="/E%20Tech%20Group%20-%20Mark%20-%20Full%20Color%20-%20Background.png" alt="E Tech Group"><span>Level Ten<small>MAKE EVERY WEEK COUNT</small></span></div><h1>Choose a new password.</h1><p>Replace your temporary password before continuing.</p><form id="required-password-form">${field('current','Temporary password','','password','required autocomplete="current-password"')}${field('password','New password','','password','required minlength="10" maxlength="256" autocomplete="new-password"')}<div id="login-error" class="form-error" role="alert"></div><button class="btn" type="submit">Change password →</button></form><button class="text-btn" id="required-password-logout" type="button">Sign out</button></div></div>`;
+  $('#required-password-form').addEventListener('submit',async event=>{
+    event.preventDefault();const button=$('button',event.target);button.disabled=true;
+    try{await api('password',{method:'POST',body:JSON.stringify(Object.fromEntries(new FormData(event.target)))});currentUser.mustChangePassword=false;await loadWorkspace();render();toast('Password changed');}
+    catch(error){$('#login-error').textContent=error.message;}finally{button.disabled=false;}
+  });
+  $('#required-password-logout').addEventListener('click',()=>handlers.logout());
+}
 async function init() {
-  try {const session=await api('session');setupRequired=session.setupRequired;currentUser=session.user;if(!session.authenticated){renderLogin();return;}await loadWorkspace();render();}
+  try {const session=await api('session');setupRequired=session.setupRequired;currentUser=session.user;if(!session.authenticated){renderLogin();return;}if(currentUser.mustChangePassword){renderRequiredPasswordChange();return;}await loadWorkspace();render();}
   catch(error){$('#app').innerHTML=`<div class="loading"><h1>Couldn’t load your workspace</h1><p>${esc(error.message)}</p><button class="btn" id="retry">Try again</button></div>`;$('#retry').addEventListener('click',init);}
 }
 init();
