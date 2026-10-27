@@ -20,6 +20,12 @@ services:
     tmpfs:
       - /tmp:size=16m,mode=1777
     stop_grace_period: 15s
+    networks:
+      - proxy
+
+networks:
+  proxy:
+    external: true
 
 volumes:
   l10_data:
