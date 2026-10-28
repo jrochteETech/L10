@@ -66,3 +66,5 @@ Defaults: port `8111`, data directory `./data`. Override using `PORT` and `DATA_
 - Passwords are salted and hashed with PBKDF2-HMAC-SHA256 (600,000 iterations). Login/setup/password attempts are rate-limited.
 - Backup restore replaces all teams and accounts, invalidates sessions, and requires login with a restored account. Export a current backup first.
 - This is an independent implementation of the EOS Level 10 meeting workflow, not an official EOS product.
+
+Test
