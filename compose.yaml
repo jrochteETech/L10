@@ -22,4 +22,5 @@ services:
     stop_grace_period: 15s
 
 volumes:
-  ${VOLUME_NAME}:
+  l10-dev_data:
+  l10_data:
