@@ -1,19 +1,19 @@
 services:
   l10:
     build: .
-    image: l10:latest
+    image: l10-dev:latest
     restart: unless-stopped
     pull_policy: never
     ports:
-      - "8111:8111"
+      - "8110:8111"
     environment:
       PORT: "8111"
       DATA_DIR: /data
       ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
       ADMIN_NAME: ${ADMIN_NAME:-Administrator}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-password!!}
     volumes:
-      - l10_data:/data
+      - l10-dev_data:/data
     cap_drop:
       - ALL
     read_only: true
@@ -28,4 +28,4 @@ networks:
     external: true
 
 volumes:
-  l10_data:
+  l10-dev_data:
