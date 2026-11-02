@@ -8,10 +8,8 @@ import (
 
 func (a *application) listTeams(w http.ResponseWriter, r *http.Request) {
 	u, _ := a.currentUser(r)
-	a.store.mu.RLock()
-	defer a.store.mu.RUnlock()
 	result := []map[string]any{}
-	for _, t := range a.store.db.Teams {
+	for _, t := range requestDatabase(r).Teams {
 		if canAccess(u, t) {
 			result = append(result, map[string]any{"id": t.ID, "name": t.Name, "stageMinutes": t.StageMinutes, "members": t.Members, "version": t.Version})
 		}
@@ -62,7 +60,7 @@ func (a *application) createTeam(w http.ResponseWriter, r *http.Request) {
 }
 func (a *application) getState(w http.ResponseWriter, r *http.Request) {
 	u, _ := a.currentUser(r)
-	t, ok := a.store.get(r.PathValue("team"))
+	t, ok := findTeam(requestDatabase(r), r.PathValue("team"))
 	if !ok {
 		respondError(w, errNotFound)
 		return
@@ -138,6 +136,7 @@ func (a *application) setMembers(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "Invalid membership")
 		return
 	}
+	var result State
 	err := a.store.update(func(db *Database) error {
 		for i := range db.Teams {
 			t := &db.Teams[i]
@@ -213,6 +212,7 @@ func (a *application) setMembers(w http.ResponseWriter, r *http.Request) {
 			}
 			t.Members = members
 			t.Version++
+			result = *t
 			return nil
 		}
 		return errNotFound
@@ -221,14 +221,11 @@ func (a *application) setMembers(w http.ResponseWriter, r *http.Request) {
 		respondError(w, err)
 		return
 	}
-	t, _ := a.store.get(r.PathValue("team"))
-	writeJSON(w, 200, t)
+	writeJSON(w, 200, result)
 }
 func (a *application) listUsers(w http.ResponseWriter, r *http.Request) {
-	a.store.mu.RLock()
-	defer a.store.mu.RUnlock()
 	users := []User{}
-	for _, u := range a.store.db.Users {
+	for _, u := range requestDatabase(r).Users {
 		users = append(users, publicUser(u))
 	}
 	writeJSON(w, 200, users)
@@ -462,10 +459,8 @@ func (a *application) transfer(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]bool{"ok": true})
 }
 func (a *application) export(w http.ResponseWriter, r *http.Request) {
-	a.store.mu.RLock()
-	defer a.store.mu.RUnlock()
 	w.Header().Set("Content-Disposition", `attachment; filename="l10-backup.json"`)
-	writeJSON(w, 200, a.store.db)
+	writeJSON(w, 200, requestDatabase(r))
 }
 func (a *application) importBackup(w http.ResponseWriter, r *http.Request) {
 	var input struct {
@@ -480,8 +475,8 @@ func (a *application) importBackup(w http.ResponseWriter, r *http.Request) {
 		if db.Version != input.Version {
 			return errConflict
 		}
-		if len(input.Database.Users) == 0 || len(input.Database.Teams) == 0 {
-			return fmtInvalid("backup must include users and teams")
+		if err := validateBackup(&input.Database); err != nil {
+			return err
 		}
 		v := db.Version
 		*db = input.Database

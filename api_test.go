@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"testing"
 	"time"
 )
@@ -17,10 +16,7 @@ type testClient struct {
 }
 
 func TestSessionReportsNormalizedEnvironment(t *testing.T) {
-	s, err := openStore(filepath.Join(t.TempDir(), "workspace.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	s, _ := testStore(t)
 	for _, test := range []struct {
 		name        string
 		value       string
@@ -73,11 +69,7 @@ func (c *testClient) request(method, path string, body any, status int, result a
 	}
 }
 func TestAccountsTeamsTransfersAndPersistence(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "workspace.json")
-	s, err := openStore(path)
-	if err != nil {
-		t.Fatal(err)
-	}
+	s, databaseURL := testStore(t)
 	a := newApplication(s)
 	admin := testClient{t: t, handler: a.routes()}
 	member := testClient{t: t, handler: a.routes()}
@@ -140,7 +132,7 @@ func TestAccountsTeamsTransfersAndPersistence(t *testing.T) {
 	transfer.DestinationVersion = destination.Version
 	transfer.Items = map[string][]string{"rocks": {"rock"}, "todos": {"missing"}}
 	admin.request("POST", "/api/transfer", transfer, 404, nil)
-	unchanged, _ := s.get(source.ID)
+	unchanged, _ := findTeam(snapshotForTest(t, s), source.ID)
 	if len(unchanged.Rocks) != 1 || unchanged.Version != source.Version {
 		t.Fatal("failed transfer partially committed")
 	}
@@ -177,15 +169,20 @@ func TestAccountsTeamsTransfersAndPersistence(t *testing.T) {
 	admin.request("PUT", "/api/users/"+bob.ID, userInput{Name: "Robert", Username: "bob", Role: "member", Disabled: true}, 200, nil)
 	member.request("GET", "/api/teams", nil, 401, nil)
 	other.request("GET", "/api/teams", nil, 401, nil)
-	reopened, err := openStore(path)
+	reopened, err := openStore(databaseURL)
 	if err != nil {
 		t.Fatal(err)
 	}
-	saved, ok := reopened.get(destination.ID)
+	defer reopened.close()
+	persisted, err := reopened.snapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	saved, ok := findTeam(persisted, destination.ID)
 	if !ok || len(saved.Meetings) != 1 || len(saved.Metrics) != 1 || saved.Rocks[0].Notes != "Coordinate the rollout" || !saved.Issues[0].LongTerm || saved.Todos[0].Notes != "Include the revised proposal" {
 		t.Fatal("data not persisted")
 	}
-	savedSource, ok := reopened.get(source.ID)
+	savedSource, ok := findTeam(persisted, source.ID)
 	if !ok || savedSource.StageMinutes[5] != 45 {
 		t.Fatal("team meeting times not persisted")
 	}
@@ -196,10 +193,7 @@ func TestAccountsTeamsTransfersAndPersistence(t *testing.T) {
 }
 
 func TestCrossOriginAndStaticAssets(t *testing.T) {
-	s, err := openStore(filepath.Join(t.TempDir(), "workspace.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	s, _ := testStore(t)
 	h := newApplication(s).routes()
 	r := httptest.NewRequest("POST", "http://localhost/api/login", bytes.NewBufferString(`{}`))
 	r.Header.Set("Origin", "https://evil.example")

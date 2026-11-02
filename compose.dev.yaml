@@ -8,19 +8,40 @@ services:
       - "${PORT:-8110}:8111"
     environment:
       PORT: "8111"
-      DATA_DIR: /data
+      PGHOST: postgres-dev
+      PGPORT: "5432"
+      PGDATABASE: l10
+      PGUSER: l10
+      PGPASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in the stack environment}
+      PGSSLMODE: disable
       APP_ENV: dev
       ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
       ADMIN_NAME: ${ADMIN_NAME:-Administrator}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
-    volumes:
-      - l10-dev_data:/data
+    depends_on:
+      postgres-dev:
+        condition: service_healthy
     cap_drop:
       - ALL
     read_only: true
     tmpfs:
       - /tmp:size=16m,mode=1777
     stop_grace_period: 15s
+  postgres-dev:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: l10
+      POSTGRES_USER: l10
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in the stack environment}
+    volumes:
+      - l10-dev_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U l10 -d l10"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    stop_grace_period: 30s
 
 volumes:
-  l10-dev_data:
+  l10-dev_postgres:
