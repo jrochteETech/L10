@@ -13,7 +13,6 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"strings"
 	"sync"
 	"syscall"
@@ -48,37 +47,58 @@ func newApplication(s *store) *application {
 }
 
 func main() {
-	dataDir := env("DATA_DIR", "./data")
-	s, err := openStore(filepath.Join(dataDir, "workspace.json"))
-	if err != nil {
+	if err := run(); err != nil {
 		log.Fatal(err)
 	}
+}
+
+func run() error {
+	if len(os.Args) > 1 {
+		return runCommand(os.Args[1:], os.Stdout)
+	}
+	s, err := openStore(os.Getenv("DATABASE_URL"))
+	if err != nil {
+		return err
+	}
+	defer s.close()
 	a := newApplication(s)
 	if password := os.Getenv("ADMIN_PASSWORD"); password != "" {
-		s.mu.RLock()
-		empty := len(s.db.Users) == 0
-		s.mu.RUnlock()
-		if empty {
+		db, err := s.snapshot()
+		if err != nil {
+			return err
+		}
+		if len(db.Users) == 0 {
 			if err := a.bootstrap(env("ADMIN_USERNAME", "admin"), env("ADMIN_NAME", "Administrator"), password); err != nil {
-				log.Fatal(err)
+				return err
 			}
 		}
 	}
 	server := &http.Server{Addr: ":" + env("PORT", "8111"), Handler: a.routes(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 20 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second}
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(stop)
+	done := make(chan struct{})
+	defer close(done)
+	shutdownDone := make(chan struct{})
 	go func() {
-		<-stop
+		defer close(shutdownDone)
+		select {
+		case <-stop:
+		case <-done:
+			return
+		}
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		if err := server.Shutdown(ctx); err != nil {
 			log.Printf("shutdown: %v", err)
 		}
 	}()
-	log.Printf("L10 listening on %s; data: %s", server.Addr, dataDir)
+	log.Printf("L10 listening on %s; storage: PostgreSQL", server.Addr)
 	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-		log.Fatal(err)
+		return err
 	}
+	<-shutdownDone
+	return nil
 }
 func env(key, fallback string) string {
 	if value := os.Getenv(key); value != "" {
@@ -89,7 +109,16 @@ func env(key, fallback string) string {
 
 func (a *application) routes() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, map[string]string{"status": "ok"}) })
+	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
+		ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+		defer cancel()
+		if err := a.store.pool.PingContext(ctx); err != nil {
+			log.Printf("health: %v", err)
+			writeError(w, 503, "Database unavailable")
+			return
+		}
+		writeJSON(w, 200, map[string]string{"status": "ok"})
+	})
 	mux.HandleFunc("GET /api/session", a.sessionInfo)
 	mux.HandleFunc("POST /api/setup", a.setup)
 	mux.HandleFunc("POST /api/login", a.login)
@@ -125,8 +154,23 @@ func (a *application) routes() http.Handler {
 				}
 			}
 		}
+		if strings.HasPrefix(r.URL.Path, "/api/") {
+			db, err := a.store.snapshot()
+			if err != nil {
+				log.Printf("read workspace: %v", err)
+				writeError(w, 503, "Database unavailable. Please try again.")
+				return
+			}
+			r = r.WithContext(context.WithValue(r.Context(), databaseContextKey{}, db))
+		}
 		mux.ServeHTTP(w, r)
 	})
+}
+
+type databaseContextKey struct{}
+
+func requestDatabase(r *http.Request) Database {
+	return r.Context().Value(databaseContextKey{}).(Database)
 }
 
 func (a *application) currentUser(r *http.Request) (User, bool) {
@@ -144,9 +188,7 @@ func (a *application) currentUser(r *http.Request) (User, bool) {
 	if !ok {
 		return User{}, false
 	}
-	a.store.mu.RLock()
-	defer a.store.mu.RUnlock()
-	for _, u := range a.store.db.Users {
+	for _, u := range requestDatabase(r).Users {
 		if u.ID == s.UserID && !u.Disabled {
 			return u, true
 		}
@@ -195,9 +237,7 @@ func canAccess(u User, t State) bool {
 }
 func (a *application) sessionInfo(w http.ResponseWriter, r *http.Request) {
 	u, ok := a.currentUser(r)
-	a.store.mu.RLock()
-	setup := len(a.store.db.Users) == 0
-	a.store.mu.RUnlock()
+	setup := len(requestDatabase(r).Users) == 0
 	writeJSON(w, 200, map[string]any{"authenticated": ok, "setupRequired": setup, "environment": a.environment, "user": publicUser(u)})
 }
 func (a *application) setSession(w http.ResponseWriter, r *http.Request, u User) {
@@ -277,9 +317,12 @@ func (a *application) setup(w http.ResponseWriter, r *http.Request) {
 		respondError(w, err)
 		return
 	}
-	a.store.mu.RLock()
-	u := a.store.db.Users[0]
-	a.store.mu.RUnlock()
+	db, err := a.store.snapshot()
+	if err != nil {
+		respondError(w, err)
+		return
+	}
+	u := db.Users[0]
 	a.setSession(w, r, u)
 	writeJSON(w, 201, publicUser(u))
 }
@@ -296,15 +339,13 @@ func (a *application) login(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "Enter a username and password")
 		return
 	}
-	a.store.mu.RLock()
 	var user User
-	for _, u := range a.store.db.Users {
+	for _, u := range requestDatabase(r).Users {
 		if u.Username == strings.ToLower(strings.TrimSpace(input.Username)) {
 			user = u
 			break
 		}
 	}
-	a.store.mu.RUnlock()
 	if !checkPassword(user, input.Password) || user.ID == "" || user.Disabled {
 		writeError(w, 401, "Incorrect username or password")
 		return

@@ -10,10 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"os"
-	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -125,12 +122,6 @@ var errInvalid = errors.New("invalid workspace")
 
 const defaultUserPassword = "password!!"
 
-type store struct {
-	mu   sync.RWMutex
-	path string
-	db   Database
-}
-
 func defaultStageMinutes() []int { return []int{5, 5, 5, 5, 5, 60, 5} }
 
 func newTeam(name string) State {
@@ -172,104 +163,20 @@ func checkPassword(user User, password string) bool {
 }
 func publicUser(user User) User { user.Salt = ""; user.PasswordHash = ""; return user }
 
-func openStore(path string) (*store, error) {
-	s := &store{path: path}
-	data, err := os.ReadFile(path)
-	if errors.Is(err, os.ErrNotExist) {
-		s.db = Database{Version: 1, Users: []User{}, Teams: []State{newTeam("Leadership team")}}
-		if err := s.persist(s.db); err != nil {
-			return nil, err
-		}
-		return s, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	if err := json.Unmarshal(data, &s.db); err != nil {
-		return nil, fmt.Errorf("read workspace: %w", err)
-	}
-	if s.db.Teams == nil {
-		return nil, errors.New("data file is not a multi-team database")
-	}
-	for i := range s.db.Teams {
-		if len(s.db.Teams[i].StageMinutes) == 0 {
-			s.db.Teams[i].StageMinutes = defaultStageMinutes()
-		}
-	}
-	if err := validateDatabase(s.db); err != nil {
-		return nil, fmt.Errorf("read workspace: %w", err)
-	}
-	return s, nil
-}
-
 func clone(s State) State {
 	data, _ := json.Marshal(s)
 	var result State
 	_ = json.Unmarshal(data, &result)
 	return result
 }
-func (s *store) get(teamID string) (State, bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	for _, team := range s.db.Teams {
+func findTeam(db Database, teamID string) (State, bool) {
+	for _, team := range db.Teams {
 		if team.ID == teamID {
-			return clone(team), true
+			return team, true
 		}
 	}
 	return State{}, false
 }
-func (s *store) update(change func(*Database) error) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	data, _ := json.Marshal(s.db)
-	var next Database
-	_ = json.Unmarshal(data, &next)
-	if err := change(&next); err != nil {
-		return err
-	}
-	if err := validateDatabase(next); err != nil {
-		return err
-	}
-	next.Version++
-	if err := s.persist(next); err != nil {
-		return err
-	}
-	s.db = next
-	return nil
-}
-
-func (s *store) persist(next Database) error {
-	if err := os.MkdirAll(filepath.Dir(s.path), 0750); err != nil {
-		return err
-	}
-	data, err := json.MarshalIndent(next, "", "  ")
-	if err != nil {
-		return err
-	}
-	f, err := os.CreateTemp(filepath.Dir(s.path), ".workspace-*.tmp")
-	if err != nil {
-		return err
-	}
-	name := f.Name()
-	defer os.Remove(name)
-	if err := f.Chmod(0600); err != nil {
-		f.Close()
-		return err
-	}
-	if _, err := f.Write(data); err != nil {
-		f.Close()
-		return err
-	}
-	if err := f.Sync(); err != nil {
-		f.Close()
-		return err
-	}
-	if err := f.Close(); err != nil {
-		return err
-	}
-	return os.Rename(name, s.path)
-}
-
 func validateDatabase(db Database) error {
 	if len(db.Users) > 1000 || len(db.Teams) > 100 {
 		return fmt.Errorf("%w: too many users or teams", errInvalid)
