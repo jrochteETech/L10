@@ -1,19 +1,20 @@
 services:
   l10:
     build: .
-    image: ${IMAGE_NAME}
+    image: ${IMAGE_NAME:-l10:latest}
     restart: unless-stopped
     pull_policy: never
     ports:
-      - ${PORT}:8111
+      - "${PORT:-8111}:8111"
     environment:
       PORT: "8111"
       DATA_DIR: /data
+      APP_ENV: production
       ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
       ADMIN_NAME: ${ADMIN_NAME:-Administrator}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-password!!}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
     volumes:
-      - ${VOLUME_NAME}:/data
+      - l10_data:/data
     cap_drop:
       - ALL
     read_only: true
@@ -22,5 +23,4 @@ services:
     stop_grace_period: 15s
 
 volumes:
-  l10-dev_data:
   l10_data:

@@ -21,10 +21,16 @@ const stages = [
   {name:'Conclude', minutes:5, description:'Recap the to-dos, agree on cascading messages, and have each attendee rate this meeting from 1 to 10.'}
 ];
 const navigation = [ ['overview','◈','Overview'], ['meeting','◷','L10 meeting'], ['scorecard','▥','Scorecard'], ['rocks','◇','Rocks'], ['todos','☑','To-dos'], ['issues','≡','Issues / IDS'], ['headlines','▤','Headlines'], ['history','↺','Meeting history'], ['settings','⚙','Team & settings'] ];
-let state, currentUser, teams = [], users = [], setupRequired = false, passwordRequired = true, saving = false, saveQueue = Promise.resolve(), filter = 'open', search = '', selectedIssue = '', selectedHistory = '', toastTimeout;
+let state, currentUser, environment = 'production', teams = [], users = [], setupRequired = false, passwordRequired = true, saving = false, saveQueue = Promise.resolve(), filter = 'open', search = '', selectedIssue = '', selectedHistory = '', toastTimeout;
 const tableSorts = {};
 const activeMeeting = () => state.meetings.find(m=>!m.endedAt);
 const plannedMinutes = () => stages.reduce((total,stage)=>total+stage.minutes,0);
+function setEnvironment(value) {
+  environment = value === 'dev' ? 'dev' : 'production';
+  document.documentElement.dataset.environment = environment;
+  $('#environment-banner').hidden = environment !== 'dev';
+  $('meta[name="theme-color"]').content = environment === 'dev' ? '#b45309' : '#1d4f91';
+}
 function applyStageMinutes() {
   const minutes=state?.stageMinutes?.length===stages.length?state.stageMinutes:defaultStageMinutes;
   stages.forEach((stage,index)=>{stage.minutes=minutes[index];});
@@ -504,7 +510,7 @@ function renderRequiredPasswordChange() {
   $('#required-password-logout').addEventListener('click',()=>handlers.logout());
 }
 async function init() {
-  try {const session=await api('session');setupRequired=session.setupRequired;currentUser=session.user;if(!session.authenticated){renderLogin();return;}if(currentUser.mustChangePassword){renderRequiredPasswordChange();return;}await loadWorkspace();render();}
+  try {const session=await api('session');setEnvironment(session.environment);setupRequired=session.setupRequired;currentUser=session.user;if(!session.authenticated){renderLogin();return;}if(currentUser.mustChangePassword){renderRequiredPasswordChange();return;}await loadWorkspace();render();}
   catch(error){$('#app').innerHTML=`<div class="loading"><h1>Couldn’t load your workspace</h1><p>${esc(error.message)}</p><button class="btn" id="retry">Try again</button></div>`;$('#retry').addEventListener('click',init);}
 }
 init();

@@ -32,14 +32,19 @@ type attempt struct {
 	Start time.Time
 }
 type application struct {
-	store    *store
-	mu       sync.Mutex
-	sessions map[string]session
-	attempts map[string]attempt
+	store       *store
+	environment string
+	mu          sync.Mutex
+	sessions    map[string]session
+	attempts    map[string]attempt
 }
 
 func newApplication(s *store) *application {
-	return &application{store: s, sessions: map[string]session{}, attempts: map[string]attempt{}}
+	environment := "production"
+	if strings.EqualFold(strings.TrimSpace(os.Getenv("APP_ENV")), "dev") {
+		environment = "dev"
+	}
+	return &application{store: s, environment: environment, sessions: map[string]session{}, attempts: map[string]attempt{}}
 }
 
 func main() {
@@ -193,7 +198,7 @@ func (a *application) sessionInfo(w http.ResponseWriter, r *http.Request) {
 	a.store.mu.RLock()
 	setup := len(a.store.db.Users) == 0
 	a.store.mu.RUnlock()
-	writeJSON(w, 200, map[string]any{"authenticated": ok, "setupRequired": setup, "user": publicUser(u)})
+	writeJSON(w, 200, map[string]any{"authenticated": ok, "setupRequired": setup, "environment": a.environment, "user": publicUser(u)})
 }
 func (a *application) setSession(w http.ResponseWriter, r *http.Request, u User) {
 	token := newID() + newID()

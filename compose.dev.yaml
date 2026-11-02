@@ -1,0 +1,26 @@
+services:
+  l10:
+    build: .
+    image: ${IMAGE_NAME:-l10:dev}
+    restart: unless-stopped
+    pull_policy: never
+    ports:
+      - "${PORT:-8110}:8111"
+    environment:
+      PORT: "8111"
+      DATA_DIR: /data
+      APP_ENV: dev
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_NAME: ${ADMIN_NAME:-Administrator}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+    volumes:
+      - l10-dev_data:/data
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    stop_grace_period: 15s
+
+volumes:
+  l10-dev_data:
