@@ -207,7 +207,8 @@ function headlinesList(headlines = state.headlines, editable = true) {
   return headlines.map(h=>`<div class="list-row"><span class="avatar">${h.kind==='customer'?'C':'E'}</span><div class="grow"><div class="row-title">${esc(h.title)}</div><div class="row-meta">${h.kind==='customer'?'Customer':'Employee'} · ${dateLabel(h.createdAt)}</div></div>${editable?`<div class="flex">${action('headline-issue','→ IDS',h.id)}${editButtons('headline',h.id)}</div>`:''}</div>`).join('');
 }
 function renderHeadlines(embedded = false) {
-  return `${embedded?'':header('Headlines','Customer and employee news your team needs to hear.',action('add-headline','+ Add headline','',''))}<section class="card"><div class="card-head"><h2>Customer & employee headlines</h2>${embedded?action('add-headline','+ Add headline'):pill(`${state.headlines.length} headlines`,'gray')}</div>${headlinesList()}</section><p class="hint">Keep each headline brief. Add anything that needs discussion to IDS. Headlines stay on the list until you remove them.</p>`;
+  const headlines=embedded?state.headlines.filter(h=>dateKey(new Date(h.createdAt))===today()):state.headlines;
+  return `${embedded?'':header('Headlines','Customer and employee news your team needs to hear.',action('add-headline','+ Add headline','',''))}<section class="card"><div class="card-head"><h2>${embedded?'Today’s ':''}Customer & employee headlines</h2>${embedded?action('add-headline','+ Add headline'):pill(`${state.headlines.length} headlines`,'gray')}</div>${headlinesList(headlines)}</section><p class="hint">${embedded?'Only headlines added today are shown during this meeting. All headlines remain available on the Headlines page.':'Keep each headline brief. Add anything that needs discussion to IDS. Headlines stay on the list until you remove them.'}</p>`;
 }
 
 function meetingSeconds(m, stage) {
