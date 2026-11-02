@@ -1,7 +1,7 @@
 services:
   l10:
     build: .
-    image: ${IMAGE_NAME:-l10:dev}
+    image: ${IMAGE_NAME:-l10-dev:latest}
     restart: unless-stopped
     pull_policy: never
     ports:
