@@ -21,10 +21,16 @@ const stages = [
   {name:'Conclude', minutes:5, description:'Recap the to-dos, agree on cascading messages, and have each attendee rate this meeting from 1 to 10.'}
 ];
 const navigation = [ ['overview','◈','Overview'], ['meeting','◷','L10 meeting'], ['scorecard','▥','Scorecard'], ['rocks','◇','Rocks'], ['todos','☑','To-dos'], ['issues','≡','Issues / IDS'], ['headlines','▤','Headlines'], ['history','↺','Meeting history'], ['settings','⚙','Team & settings'] ];
-let state, currentUser, teams = [], users = [], setupRequired = false, passwordRequired = true, saving = false, saveQueue = Promise.resolve(), filter = 'open', search = '', selectedIssue = '', selectedHistory = '', toastTimeout;
+let state, currentUser, environment = 'production', teams = [], users = [], setupRequired = false, passwordRequired = true, saving = false, saveQueue = Promise.resolve(), filter = 'open', search = '', selectedIssue = '', selectedHistory = '', toastTimeout;
 const tableSorts = {};
 const activeMeeting = () => state.meetings.find(m=>!m.endedAt);
 const plannedMinutes = () => stages.reduce((total,stage)=>total+stage.minutes,0);
+function setEnvironment(value) {
+  environment = value === 'dev' ? 'dev' : 'production';
+  document.documentElement.dataset.environment = environment;
+  $('#environment-banner').hidden = environment !== 'dev';
+  $('meta[name="theme-color"]').content = environment === 'dev' ? '#b45309' : '#1d4f91';
+}
 function applyStageMinutes() {
   const minutes=state?.stageMinutes?.length===stages.length?state.stageMinutes:defaultStageMinutes;
   stages.forEach((stage,index)=>{stage.minutes=minutes[index];});
@@ -180,16 +186,19 @@ function renderTodos(embedded = false) {
   return `${embedded?'':header('To-dos','One owner. One action. Seven days to follow through.',action('add-todo','+ Add to-do','',''))}${embedded?'':`<div class="toolbar"><div class="tabs">${[['open','Open'],['done','Completed'],['all','All to-dos']].map(([key,label])=>`<button class="tab ${filter===key?'active':''}" data-filter="${key}">${label}</button>`).join('')}</div><span class="muted subtitle">${state.todos.filter(t=>!t.done).length} open commitments</span></div>`}<section class="card"><div class="card-head"><h2>${embedded?'Weekly commitments':'Action list'}</h2>${embedded?action('add-todo','+ Add to-do'):pill(`${list.length} to-dos`,'gray')}</div>${todosTable(list)}</section>${embedded?`<p class="hint">Showing open to-dos and those completed in the last seven days. Completion: ${completionRate(list)}%. Target: 90% or better.</p>`:''}`;
 }
 
+function issueActions(issue) {
+  return `${action('issue-todo','Add to-do',issue.id)}<button class="btn ${issue.longTerm?'':'secondary '}small" data-action="toggle-long-term" data-id="${esc(issue.id)}" aria-pressed="${!!issue.longTerm}">Long term</button>`;
+}
 function issuesList(issues, editable = true, members = state.members) {
   if (!issues.length) return empty('Make room for the real conversation','Capture issues here so you can stay focused during the rest of the agenda.',editable?action('add-issue','Add an issue'):'');
   const meeting=activeMeeting(), chosen=meeting?.chosenIssueIds || [];
-  return issues.map(i=>{const isChosen=chosen.includes(i.id);return `<div class="list-row ${isChosen?'issue-chosen':''}"><span class="priority">${isChosen?'★':`P${i.priority}`}</span><div class="grow"><div class="row-title">${esc(i.title)}</div><div class="row-meta">${isChosen?'Chosen for this meeting · ':''}${esc(memberName(i.owner,members))}${i.details?' · Has discussion notes':''}${i.longTerm?' · Long term':''}</div></div>${i.longTerm?pill('Long term','gray'):''}${editable?`<div class="flex">${meeting && i.status==='open'?action('toggle-chosen-issue',isChosen?'Chosen ✓':'Choose',i.id,isChosen?'small':'secondary small'):''}${i.status==='open'?action('select-issue','Discuss',i.id):action('reopen-issue','Reopen',i.id)}${editButtons('issue',i.id)}</div>`:pill(i.status==='solved'?'Solved':'Open',i.status==='solved'?'':'gray')}</div>`;}).join('');
+  return issues.map(i=>{const isChosen=chosen.includes(i.id);return `<div class="list-row ${isChosen?'issue-chosen':''}"><span class="priority">${isChosen?'★':`P${i.priority}`}</span><div class="grow"><div class="row-title">${esc(i.title)}</div><div class="row-meta">${isChosen?'Chosen for this meeting · ':''}${esc(memberName(i.owner,members))}${i.details?' · Has discussion notes':''}${i.longTerm?' · Long term':''}</div></div>${i.longTerm?pill('Long term','gray'):''}${editable?`<div class="flex wrap">${meeting && i.status==='open'?action('toggle-chosen-issue',isChosen?'Chosen ✓':'Choose',i.id,isChosen?'small':'secondary small'):''}${i.status==='open'?action('select-issue','Discuss',i.id):action('reopen-issue','Reopen',i.id)}${issueActions(i)}${editButtons('issue',i.id)}</div>`:pill(i.status==='solved'?'Solved':'Open',i.status==='solved'?'':'gray')}</div>`;}).join('');
 }
 function renderIssues(embedded = false) {
   const meeting=activeMeeting(), chosen=meeting?.chosenIssueIds || [];
   const list=state.issues.filter(i=>(embedded?i.status==='open':filter==='all' || i.status===filter || (filter==='done' && i.status==='solved')) && (!search || `${i.title} ${i.details}`.toLowerCase().includes(search.toLowerCase()))).sort((a,b)=>(chosen.includes(b.id)?1:0)-(chosen.includes(a.id)?1:0) || a.priority-b.priority || a.createdAt.localeCompare(b.createdAt));
   const selected=state.issues.find(i=>i.id===selectedIssue && i.status==='open');
-  return `${embedded?'':header('Issues / IDS','Solve the root cause. Leave with a decision and a next step.',action('add-issue','+ Add issue','',''))}${selected?`<section class="card"><div class="card-head"><h2>On the table</h2><button class="icon-btn" data-action="close-issue" aria-label="Close discussion">×</button></div><div class="card-body"><div class="ids-steps"><div><strong>1. Identify</strong><small>What’s the real issue underneath the symptoms?</small></div><div><strong>2. Discuss</strong><small>Get the facts and perspectives on the table.</small></div><div><strong>3. Solve</strong><small>Agree on a decision, an owner, and a next step.</small></div></div><h3>${esc(selected.title)}</h3><label class="field"><span>Root cause & discussion notes</span><textarea id="issue-discussion" rows="5">${esc(selected.details)}</textarea></label><div class="flex wrap">${action('save-discussion','Save notes',selected.id)}${action('solve-issue','Solve & assign action →',selected.id,'')} ${pill(`Priority ${selected.priority}`,'gray')}</div></div></section><div class="hint">Work one issue at a time. Prioritize importance over the order it was added.</div>`:''}
+  return `${embedded?'':header('Issues / IDS','Solve the root cause. Leave with a decision and a next step.',action('add-issue','+ Add issue','',''))}${selected?`<section class="card"><div class="card-head"><h2>On the table</h2><button class="icon-btn" data-action="close-issue" aria-label="Close discussion">×</button></div><div class="card-body"><div class="ids-steps"><div><strong>1. Identify</strong><small>What’s the real issue underneath the symptoms?</small></div><div><strong>2. Discuss</strong><small>Get the facts and perspectives on the table.</small></div><div><strong>3. Solve</strong><small>Agree on a decision, an owner, and a next step.</small></div></div><h3>${esc(selected.title)}</h3><label class="field"><span>Root cause & discussion notes</span><textarea id="issue-discussion" rows="5">${esc(selected.details)}</textarea></label><div class="flex wrap">${action('save-discussion','Save notes',selected.id)}${issueActions(selected)}${action('solve-issue','Solve & assign action →',selected.id,'')} ${pill(`Priority ${selected.priority}`,'gray')}</div></div></section><div class="hint">Work one issue at a time. Prioritize importance over the order it was added.</div>`:''}
     ${meeting?`<div class="focus-bar"><div><strong>Meeting focus · ${chosen.length}/3 chosen</strong><small>Choose up to three issues. Chosen issues stay at the top for this meeting.</small></div>${chosen.length?action('clear-chosen-issues','Clear choices'):''}</div>`:''}${embedded?'':`<div class="toolbar"><div class="tabs">${[['open','Open issues'],['done','Solved'],['all','All issues']].map(([key,label])=>`<button class="tab ${filter===key?'active':''}" data-filter="${key}">${label}</button>`).join('')}</div><input class="search" id="issue-search" placeholder="Search issues…" aria-label="Search issues" value="${esc(search)}"></div>`}<section class="card"><div class="card-head"><h2>${embedded?'Prioritize, then solve':'Issues List'}</h2>${embedded?action('add-issue','+ Add issue'):pill(`${list.length} issues`,'gray')}</div>${issuesList(list)}</section>`;
 }
 
@@ -316,8 +325,8 @@ function ownerField(owner='') { return `<label class="field"><span>Accountable o
 function confirmDialog(title, message, callback, label='Confirm') { openModal(title,`<p class="muted">${esc(message)}</p>`,callback,label); }
 const collections = {member:'members',metric:'metrics',rock:'rocks',todo:'todos',issue:'issues',headline:'headlines'};
 
-function editItem(type,itemID='') {
-  const item=state[collections[type]].find(i=>i.id===itemID), data=item || {};
+function editItem(type,itemID='',defaults={}) {
+  const item=state[collections[type]].find(i=>i.id===itemID), data=item || defaults;
   let body;
   if(type==='member') {manageMembers();return;}
   if(type==='metric') body=field('name','Measurable',data.name,'text','required maxlength="500" autofocus')+ownerField(data.owner)+`<div class="form-grid">${field('goal','Weekly goal',data.goal??0,'number','required step="any"')}<label class="field"><span>Goal direction</span><select name="direction"><option value="gte" ${data.direction!=='lte'?'selected':''}>At least (≥)</option><option value="lte" ${data.direction==='lte'?'selected':''}>At most (≤)</option></select></label></div>`+field('unit','Unit (optional)',data.unit,'text','maxlength="30" placeholder="e.g. $, %, calls"');
@@ -430,6 +439,8 @@ const handlers = {
   'toggle-chosen-issue':item=>mutate(next=>{const m=next.meetings.find(m=>!m.endedAt);if(!m)throw new Error('Start a meeting before choosing focus issues.');m.chosenIssueIds=m.chosenIssueIds || [];if(m.chosenIssueIds.includes(item))m.chosenIssueIds=m.chosenIssueIds.filter(id=>id!==item);else {if(m.chosenIssueIds.length>=3)throw new Error('Clear or unchoose an issue before choosing another.');m.chosenIssueIds.push(item);}},''),
   'clear-chosen-issues':()=>mutate(next=>{const m=next.meetings.find(m=>!m.endedAt);if(m)m.chosenIssueIds=[];},'Meeting focus cleared'),
   'save-discussion':item=>{const value=$('#issue-discussion').value;mutate(next=>{const i=next.issues.find(i=>i.id===item);if(i)i.details=value;});},
+  'issue-todo':item=>{const issue=state.issues.find(i=>i.id===item);if(!issue)throw new Error('Issue no longer exists.');editItem('todo','',{title:issue.title,owner:issue.owner,assignees:issue.assignees});},
+  'toggle-long-term':item=>mutate(next=>{const issue=next.issues.find(i=>i.id===item);if(!issue)throw new Error('Issue no longer exists.');issue.longTerm=!issue.longTerm;}),
   'solve-issue':solveIssue, 'reopen-issue':item=>mutate(next=>{const i=next.issues.find(i=>i.id===item);if(i)i.status='open';}),
   'view-history':item=>{selectedHistory=item;render();}, 'back-history':()=>{selectedHistory='';render();}, print:()=>window.print(),
   'create-team':createTeam, 'manage-members':manageMembers, 'add-user':()=>editUser(), 'edit-user':editUser,
@@ -504,7 +515,7 @@ function renderRequiredPasswordChange() {
   $('#required-password-logout').addEventListener('click',()=>handlers.logout());
 }
 async function init() {
-  try {const session=await api('session');setupRequired=session.setupRequired;currentUser=session.user;if(!session.authenticated){renderLogin();return;}if(currentUser.mustChangePassword){renderRequiredPasswordChange();return;}await loadWorkspace();render();}
+  try {const session=await api('session');setEnvironment(session.environment);setupRequired=session.setupRequired;currentUser=session.user;if(!session.authenticated){renderLogin();return;}if(currentUser.mustChangePassword){renderRequiredPasswordChange();return;}await loadWorkspace();render();}
   catch(error){$('#app').innerHTML=`<div class="loading"><h1>Couldn’t load your workspace</h1><p>${esc(error.message)}</p><button class="btn" id="retry">Try again</button></div>`;$('#retry').addEventListener('click',init);}
 }
 init();

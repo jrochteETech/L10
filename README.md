@@ -8,7 +8,7 @@ A self-hosted EOS Level 10 meeting workspace. Go backend; vanilla JavaScript, HT
 - Individual username/password accounts; users can belong to multiple teams.
 - Administrators create users and teams, manage memberships, reset passwords, and disable accounts. New users receive the temporary password `password!!` and must replace it at first sign-in. Members can collaborate in their assigned teams. Administrators can access all teams.
 - Multiple assigned users on every measurable, rock, to-do, issue, and headline. An optional primary owner provides accountability.
-- Notes on rocks and to-dos, plus a long-term classification for issues.
+- Notes on rocks and to-dos, plus a long-term classification for issues. Use **Add to-do** on an issue to create actions without solving it (repeat for multiple to-dos), and the adjacent **Long term** toggle to change its classification.
 - Move any individual item or concluded meeting report between accessible teams. Move all items from Team & settings. Transfers preserve assignments and add missing assignees to the destination team. Memberships in the source team stay intact.
 - Standard 90-minute L10 agenda: Segue (5), Scorecard (5), Rocks (5), Headlines (5), To-dos (5), IDS (60), Conclude (5).
 - Persistent section timer with pause/resume; prioritize issues, capture discussion notes, record resolutions, and create actions.
@@ -21,16 +21,25 @@ A self-hosted EOS Level 10 meeting workspace. Go backend; vanilla JavaScript, HT
 docker compose up -d --build
 ```
 
-Open **http://YOUR_SERVER:8111**. On a fresh installation, create the first administrator in the browser. Alternatively, configure `ADMIN_USERNAME`, `ADMIN_NAME`, and `ADMIN_PASSWORD` in Komodo or a `.env` file before the first start. The password must contain at least 10 characters. Bootstrap variables only apply when no accounts exist.
+Open **http://YOUR_SERVER:8111**. This uses the production theme and the `l10_data` volume. For a separate local development instance, use:
+
+```sh
+docker compose -f compose.dev.yaml up -d --build
+```
+
+The development stack uses a prominent development banner, port **8112**, and its own `l10-dev_data` volume. The app defaults to production mode outside these Compose configurations.
+
+On a fresh installation, create the first administrator in the browser. For unattended bootstrap, supply `ADMIN_USERNAME`, `ADMIN_NAME`, and `ADMIN_PASSWORD` through Komodo's protected stack environment; the password must contain at least 10 characters. There is intentionally no default bootstrap password. Bootstrap variables apply only when no accounts exist. Never commit passwords or other secrets in env files.
 
 Data is stored in the `l10_data` named volume at `/data/workspace.json`. Container upgrades preserve it. Use Team & settings → Back up & restore to export all teams and accounts; backups contain password hashes and should be kept private.
 
 ### Komodo deployment
 
 1. Add this repository as a Komodo Repo resource and sync it onto the build/deployment server.
-2. Create a Stack using this repository and `compose.yaml` as the compose file.
-3. Optionally configure the `ADMIN_*` variables in the stack environment for unattended initial account creation.
-4. Deploy/build the stack and visit port **8111** on the server.
+2. Create separate Komodo Stacks if you want both environments running. Point production at the `main` branch and `compose.yaml`; point development at your development branch and `compose.dev.yaml`.
+3. Keep the stack names distinct so Docker Compose scopes the `l10_data` and `l10-dev_data` volumes independently. The files default to image tags `l10:latest` and `l10:dev`, and host ports **8111** and **8112**; set `IMAGE_NAME` or `PORT` in the relevant stack environment to override them.
+4. Optionally configure `ADMIN_*` in the protected stack environment for unattended first-account creation. Do not put credentials in committed env files.
+5. Deploy/build the stacks and visit the corresponding host port.
 
 For a Komodo Deployment resource instead of a Stack, build the repository's `Dockerfile` as `l10:latest`, map host **8111** to container **8111**, and attach a persistent volume to **`/data`**. The container runs as UID/GID `10001`; a bind-mounted data directory must be writable by that user.
 

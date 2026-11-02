@@ -16,6 +16,34 @@ type testClient struct {
 	cookie  *http.Cookie
 }
 
+func TestSessionReportsNormalizedEnvironment(t *testing.T) {
+	s, err := openStore(filepath.Join(t.TempDir(), "workspace.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range []struct {
+		name        string
+		value       string
+		environment string
+	}{
+		{name: "dev", value: "dev", environment: "dev"},
+		{name: "production default", environment: "production"},
+		{name: "unknown value", value: "dev<script>", environment: "production"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Setenv("APP_ENV", test.value)
+			client := testClient{t: t, handler: newApplication(s).routes()}
+			var result struct {
+				Environment string `json:"environment"`
+			}
+			client.request("GET", "/api/session", nil, 200, &result)
+			if result.Environment != test.environment {
+				t.Fatalf("environment = %q, want %q", result.Environment, test.environment)
+			}
+		})
+	}
+}
+
 func (c *testClient) request(method, path string, body any, status int, result any) {
 	c.t.Helper()
 	var buffer bytes.Buffer
