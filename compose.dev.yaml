@@ -1,5 +1,5 @@
 services:
-  l10:
+  l10-dev:
     build: .
     image: ${IMAGE_NAME:-l10-dev:latest}
     restart: unless-stopped
