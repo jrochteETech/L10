@@ -79,6 +79,13 @@ func TestAccountsTeamsTransfersAndPersistence(t *testing.T) {
 	admin.request("POST", "/api/setup", map[string]string{"username": "second", "name": "Second", "password": "strong-password-123"}, 400, nil)
 	var bob User
 	admin.request("POST", "/api/users", userInput{Name: "Bob", Username: "bob", Role: "member"}, 201, &bob)
+	var aaron User
+	admin.request("POST", "/api/users", userInput{Name: "Aaron", Username: "aaron", Role: "member"}, 201, &aaron)
+	var listedUsers []User
+	admin.request("GET", "/api/users", nil, 200, &listedUsers)
+	if len(listedUsers) != 3 || listedUsers[0].Name != "Aaron" || listedUsers[1].Name != "Administrator" || listedUsers[2].Name != "Bob" {
+		t.Fatalf("users are not alphabetized: %v", listedUsers)
+	}
 	if bob.PasswordHash != "" || bob.Salt != "" {
 		t.Fatal("password hashes leaked")
 	}

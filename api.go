@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"net/http"
+	"sort"
 	"strings"
 )
 
@@ -228,6 +229,9 @@ func (a *application) listUsers(w http.ResponseWriter, r *http.Request) {
 	for _, u := range requestDatabase(r).Users {
 		users = append(users, publicUser(u))
 	}
+	sort.SliceStable(users, func(i, j int) bool {
+		return strings.ToLower(users[i].Name) < strings.ToLower(users[j].Name)
+	})
 	writeJSON(w, 200, users)
 }
 

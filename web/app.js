@@ -37,8 +37,28 @@ function applyStageMinutes() {
 }
 const route = () => location.hash.slice(1).split('/')[0] || 'overview';
 const memberName = (owner, members = state.members) => members.find(m=>m.id===owner)?.name || 'Unassigned';
+const alphabeticalMembers = members => [...members].sort((a,b)=>a.name.localeCompare(b.name,undefined,{sensitivity:'base'}));
+const alphabeticalMemberIDs = (ids,members=state.members) => [...ids].sort((a,b)=>memberName(a,members).localeCompare(memberName(b,members),undefined,{sensitivity:'base'}));
+function sortUserLists(root) {
+  const sortByText = elements => elements.sort((a,b)=>a.textContent.trim().localeCompare(b.textContent.trim(),undefined,{sensitivity:'base'}));
+  root.querySelectorAll('.attendees').forEach(list=>sortByText([...list.children].filter(item=>item.classList.contains('attendee'))).forEach(item=>list.append(item)));
+  new Set([...root.querySelectorAll('.rating-row')].map(row=>row.parentElement)).forEach(list=>sortByText([...list.children].filter(item=>item.classList.contains('rating-row'))).forEach(item=>list.append(item)));
+  root.querySelectorAll('.card').forEach(card=>{
+    const heading=card.querySelector('.card-head h2')?.textContent;
+    if(heading==='Team members' || heading==='User management') sortByText([...card.querySelectorAll(':scope > .list-row')]).forEach(item=>card.append(item));
+  });
+  const reportAttendees=root.querySelector('.card-body > .history-summary + .hint');
+  const report=state?.meetings.find(meeting=>meeting.id===selectedHistory);
+  if(reportAttendees && report) {
+    const members=report.snapshot?.members || state.members;
+    reportAttendees.textContent=alphabeticalMemberIDs(report.attendees,members).map(id=>memberName(id,members)).join(', ');
+  }
+  for(const label of root.querySelectorAll('.section-label')) {
+    if(label.textContent==='Individual ratings' && label.nextElementSibling) sortByText([...label.nextElementSibling.children]).forEach(item=>label.nextElementSibling.append(item));
+  }
+}
 const ownerHTML = (owner, members = state.members) => `<span class="owner"><span class="avatar">${esc(initials(memberName(owner,members))) || '—'}</span>${esc(memberName(owner,members))}</span>`;
-const ownerOptions = (owner = '') => `<option value="">Unassigned</option>${state.members.map(m=>`<option value="${esc(m.id)}" ${owner===m.id?'selected':''}>${esc(m.name)}</option>`).join('')}`;
+const ownerOptions = (owner = '') => `<option value="">Unassigned</option>${alphabeticalMembers(state.members).map(m=>`<option value="${esc(m.id)}" ${owner===m.id?'selected':''}>${esc(m.name)}</option>`).join('')}`;
 const pill = (text, color = '') => `<span class="pill ${color}">${esc(text)}</span>`;
 const action = (name, label, item = '', style = 'secondary small') => `<button class="btn ${style}" data-action="${name}" data-id="${esc(item)}">${esc(label)}</button>`;
 const editButtons = (type, item) => `<button class="icon-btn" data-action="edit-${type}" data-id="${esc(item)}" aria-label="Edit ${type}" title="Edit">✎</button>${type!=='member'?`<button class="icon-btn" data-action="move-${type}" data-id="${esc(item)}" aria-label="Move ${type} to another team" title="Move to another team">⇄</button>`:''}<button class="icon-btn" data-action="delete-${type}" data-id="${esc(item)}" aria-label="Delete ${type}" title="Delete">×</button>`;
@@ -101,7 +121,7 @@ function render() {
   const current = navigation.find(n=>n[0]===route()) ? route() : 'overview';
   const views = {overview:renderOverview, meeting:renderMeeting, scorecard:()=>renderScorecard(), rocks:()=>renderRocks(), todos:()=>renderTodos(), issues:()=>renderIssues(), headlines:()=>renderHeadlines(), history:renderHistory, settings:renderSettings};
   $('#app').innerHTML = `<div class="layout"><aside class="sidebar"><a class="brand" href="#overview"><img class="brand-mark" src="/E%20Tech%20Group%20-%20Mark%20-%20Full%20Color%20-%20Background.png" alt="E Tech Group"><span>Level Ten<small>MAKE EVERY WEEK COUNT</small></span></a><div class="team-selector"><label for="team-select" class="team-label">Active team</label><select id="team-select" aria-label="Switch team">${teams.map(t=>`<option value="${esc(t.id)}" ${state.id===t.id?'selected':''}>${esc(t.name)}</option>`).join('')}</select>${currentUser.role==='admin'?'<button class="text-btn" data-action="create-team">+ Create team</button>':''}</div><nav class="nav" aria-label="Main navigation">${navigation.map(([key,icon,label])=>`<a href="#${key}" class="${key===current?'active':''}" ${key===current?'aria-current="page"':''}><span class="nav-icon" aria-hidden="true">${icon}</span>${label}${key==='issues' && state.issues.some(i=>i.status==='open')?`<span class="nav-count">${state.issues.filter(i=>i.status==='open').length}</span>`:''}${key==='meeting' && activeMeeting()?'<span class="nav-count">LIVE</span>':''}</a>`).join('')}</nav><div class="sidebar-bottom"><div class="team-card"><strong>${esc(currentUser.name)}</strong><small>${currentUser.role==='admin'?'Administrator':'Team member'} · ${teams.length} teams</small></div></div></aside><main class="main"><div class="topbar"><div class="breadcrumb">${esc(state.name)} <span>/ ${esc(navigation.find(n=>n[0]===current)[2])}</span></div><div class="top-actions"><span id="save-status" class="save-status"></span><button class="icon-btn" data-action="refresh" aria-label="Refresh workspace" title="Refresh workspace">↻</button><button class="text-btn" data-action="logout">Sign out</button><span class="avatar" title="${esc(currentUser.name)}">${esc(initials(currentUser.name))}</span></div></div><div class="content">${views[current]()}<div class="footer-note">LEVEL TEN · Clarity. Accountability. Traction.</div></div></main></div>`;
-  decorateAssignments(); decoratePlannedTime(); decorateAgendaSettings(); updateSaveStatus(); updateTimer();
+  sortUserLists($('#app')); decorateAssignments(); decoratePlannedTime(); decorateAgendaSettings(); updateSaveStatus(); updateTimer();
 }
 
 function decoratePlannedTime() {
@@ -261,7 +281,7 @@ function assigneesField(selected=[]) {
 }
 function assignmentHTML(item,members=state.members) {
   const ids=[...new Set([item.owner,...(item.assignees || [])].filter(Boolean))];
-  return ids.length?ids.map(uid=>ownerHTML(uid,members)).join(' '):'<span class="muted">Unassigned</span>';
+  return ids.length?alphabeticalMemberIDs(ids,members).map(uid=>ownerHTML(uid,members)).join(' '):'<span class="muted">Unassigned</span>';
 }
 async function loadWorkspace(preferred) {
   teams=await api('teams');users=currentUser.role==='admin'?await api('users'):[];
@@ -313,6 +333,7 @@ function moveDialog(type='',itemID='') {
 function openModal(title, body, submit, label = 'Save') {
   const modal=$('#modal');
   modal.innerHTML=`<div class="modal-head"><h2 id="modal-title">${esc(title)}</h2><button class="icon-btn" type="button" data-close aria-label="Close dialog">×</button></div><form class="modal-body" id="modal-form">${body}<div id="modal-error" class="form-error" role="alert"></div><div class="modal-actions"><button type="button" class="btn secondary" data-close>Cancel</button><button type="submit" class="btn">${esc(label)}</button></div></form>`;
+  sortUserLists(modal);
   if (!modal.open) modal.showModal();
   $('#modal-form').addEventListener('submit',async event=>{
     event.preventDefault(); const button=$('button[type="submit"]',modal); button.disabled=true;
