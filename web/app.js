@@ -419,18 +419,25 @@ function sendToIDS(type,itemID) {
 function solveIssue(itemID) {
   const issue=state.issues.find(i=>i.id===itemID); if(!issue)return;
   const discussion=$('#issue-discussion')?.value ?? issue.details;
-  openModal('Solve this issue',`<p class="muted">${esc(issue.title)}</p><label class="field"><span>Decision / resolution</span><textarea name="resolution" required rows="3" maxlength="10000" placeholder="What did the team decide?"></textarea></label>${field('action','Next action (optional)','','text','maxlength="500" placeholder="A specific seven-day commitment"')}${ownerField(issue.owner)}${assigneesField(issue.assignees || [])}${field('due','Action due date',plusDays(7),'date','required')}`,async form=>{
+  openModal('Solve this issue',`<p class="muted">${esc(issue.title)}</p><label class="field"><span>Decision / resolution</span><textarea name="resolution" required rows="3" maxlength="10000" placeholder="What did the team decide?"></textarea></label><label class="attendee"><input class="check" id="add-todo-checkbox" name="addTodo" type="checkbox">Add an additional to-do item</label><div id="additional-todo-fields" hidden>${field('action','To-do item','','text','required maxlength="500" placeholder="A specific seven-day commitment"')}${ownerField(issue.owner)}${assigneesField(issue.assignees || [])}${field('due','Action due date',plusDays(7),'date','required')}</div>`,async form=>{
     if(!form.get('resolution').trim()) throw new Error('Record the team’s decision.');
-    if(form.get('action').trim() && !form.get('owner')) throw new Error('Choose an owner for the next action.');
+    if(form.has('addTodo') && !form.get('owner')) throw new Error('Choose an owner for the additional to-do item.');
     const ok=await mutate(next=>{
       const current=next.issues.find(i=>i.id===itemID); if(!current)throw new Error('Issue no longer exists.');
       current.details=`${discussion}${discussion?'\n\n':''}Resolution (${today()}): ${form.get('resolution').trim()}`;
       current.status='solved';
       for(const meeting of next.meetings.filter(m=>!m.endedAt))meeting.chosenIssueIds=(meeting.chosenIssueIds || []).filter(id=>id!==itemID);
-      if(form.get('action').trim())next.todos.push({id:id(),title:form.get('action').trim(),owner:form.get('owner'),assignees:[...new Set([form.get('owner'),...form.getAll('assignee')].filter(Boolean))],due:form.get('due'),done:false,completedAt:''});
+      if(form.has('addTodo'))next.todos.push({id:id(),title:form.get('action').trim(),owner:form.get('owner'),assignees:[...new Set([form.get('owner'),...form.getAll('assignee')].filter(Boolean))],due:form.get('due'),done:false,completedAt:''});
     },'Issue solved. Keep the momentum.');
     if(ok) { selectedIssue=''; render(); } return ok;
   },'Mark solved');
+  const checkbox=$('#add-todo-checkbox'), fields=$('#additional-todo-fields');
+  checkbox.addEventListener('change',()=>{
+    fields.hidden=!checkbox.checked;
+    fields.querySelectorAll('input,select,textarea').forEach(input=>{input.disabled=!checkbox.checked;});
+    fields.querySelector('[name="owner"]').required=checkbox.checked;
+  });
+  fields.querySelectorAll('input,select,textarea').forEach(input=>{input.disabled=true;});
 }
 function finishMeeting() {
   const captured=captureDrafts(), m=activeMeeting(); if(!m)return;
