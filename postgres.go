@@ -13,7 +13,7 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
-//go:embed migrations/*.sql
+//go:embed *.sql
 var migrations embed.FS
 
 type store struct {
@@ -55,7 +55,7 @@ func (s *store) migrate() error {
 	if _, err := tx.ExecContext(ctx, "CREATE TABLE IF NOT EXISTS schema_migrations (name text PRIMARY KEY)"); err != nil {
 		return err
 	}
-	files, err := migrations.ReadDir("migrations")
+	files, err := migrations.ReadDir(".")
 	if err != nil {
 		return err
 	}
@@ -67,7 +67,7 @@ func (s *store) migrate() error {
 		if applied {
 			continue
 		}
-		body, err := migrations.ReadFile("migrations/" + file.Name())
+		body, err := migrations.ReadFile(file.Name())
 		if err != nil {
 			return err
 		}
