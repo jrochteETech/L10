@@ -21,7 +21,7 @@ const stages = [
   {name:'Conclude', minutes:5, description:'Recap the to-dos, agree on cascading messages, and have each attendee rate this meeting from 1 to 10.'}
 ];
 const navigation = [ ['overview','◈','Overview'], ['meeting','◷','L10 meeting'], ['scorecard','▥','Scorecard'], ['rocks','◇','Rocks'], ['todos','☑','To-dos'], ['issues','≡','Issues / IDS'], ['headlines','▤','Headlines'], ['history','↺','Meeting history'], ['settings','⚙','Team & settings'] ];
-let state, currentUser, environment = 'production', teams = [], users = [], setupRequired = false, passwordRequired = true, saving = false, saveQueue = Promise.resolve(), filter = 'open', search = '', selectedIssue = '', selectedHistory = '', toastTimeout;
+let state, currentUser, environment = 'production', teams = [], users = [], setupRequired = false, passwordRequired = true, saving = false, saveQueue = Promise.resolve(), filter = 'open', rockFilter = 'active', search = '', selectedIssue = '', selectedHistory = '', toastTimeout;
 const tableSorts = {};
 const activeMeeting = () => state.meetings.find(m=>!m.endedAt);
 const plannedMinutes = () => stages.reduce((total,stage)=>total+stage.minutes,0);
@@ -168,7 +168,7 @@ function decorateAssignments() {
 
 function renderOverview() {
   const meeting = activeMeeting(), week = currentWeek(), measured = state.metrics.filter(m=>m.values[week]!==undefined), good = measured.filter(m=>isOnTrack(m,m.values[week])).length;
-  const rocks = state.rocks.filter(r=>r.status!=='done'), todos=state.todos.filter(t=>!t.done), issues=state.issues.filter(i=>i.status==='open').sort((a,b)=>a.priority-b.priority);
+  const rocks = state.rocks.filter(r=>!r.archived && r.status!=='done'), todos=state.todos.filter(t=>!t.done), issues=state.issues.filter(i=>i.status==='open').sort((a,b)=>a.priority-b.priority);
   const last = state.meetings.filter(m=>m.endedAt).sort((a,b)=>b.startedAt.localeCompare(a.startedAt))[0];
   return `${header('A little structure. A lot of traction.',`${new Date().toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric'})} · ${state.name}`,action(meeting?'resume':'start-meeting',meeting?'Resume meeting':'▶ Start L10 meeting','',''))}
     ${!state.members.length?`<div class="callout"><strong>Welcome to your meeting workspace.</strong> Start by adding your team, then define your weekly measurables and quarterly rocks. <a href="#settings">Set up your team →</a></div>`:''}
@@ -189,11 +189,13 @@ function renderScorecard(embedded = false) {
 function rocksTable(rocks = state.rocks, editable = true, members = state.members) {
   if (!rocks.length) return empty('Focus on the big things','Define the most important outcomes for this quarter, with one accountable owner each.',editable?action('add-rock','Add a rock'):'');
   const table='rocks', rows=sortedRows(rocks,table,{title:r=>r.title,owner:r=>memberName(r.owner,members),due:r=>r.due,status:r=>r.status});
-  return `<div class="table-wrap"><table><thead><tr>${sortableHeader(table,'title','Quarterly rock')}${sortableHeader(table,'owner','Owner')}${sortableHeader(table,'due','Due date')}${sortableHeader(table,'status','Status')}<th>Actions</th></tr></thead><tbody>${rows.map(r=>`<tr><td class="table-title">${esc(r.title)}${r.notes?`<div class="row-meta item-notes">${esc(r.notes)}</div>`:''}</td><td>${ownerHTML(r.owner,members)}</td><td>${dateLabel(r.due)}</td><td>${editable?`<select class="input" data-rock="${esc(r.id)}" aria-label="Status for ${esc(r.title)}"><option value="on-track" ${r.status==='on-track'?'selected':''}>On track</option><option value="off-track" ${r.status==='off-track'?'selected':''}>Off track</option><option value="done" ${r.status==='done'?'selected':''}>Complete</option></select>`:rockPill(r.status)}</td><td><div class="flex">${editable?`${action('rock-issue','→ IDS',r.id)}${editButtons('rock',r.id)}`:''}</div></td></tr>`).join('')}</tbody></table></div>`;
+  return `<div class="table-wrap"><table><thead><tr>${sortableHeader(table,'title','Quarterly rock')}${sortableHeader(table,'owner','Owner')}${sortableHeader(table,'due','Due date')}${sortableHeader(table,'status','Status')}<th>Actions</th></tr></thead><tbody>${rows.map(r=>`<tr><td class="table-title">${esc(r.title)}${r.notes?`<div class="row-meta item-notes">${esc(r.notes)}</div>`:''}</td><td>${ownerHTML(r.owner,members)}</td><td>${dateLabel(r.due)}</td><td>${editable?`<select class="input" data-rock="${esc(r.id)}" aria-label="Status for ${esc(r.title)}"><option value="on-track" ${r.status==='on-track'?'selected':''}>On track</option><option value="off-track" ${r.status==='off-track'?'selected':''}>Off track</option><option value="done" ${r.status==='done'?'selected':''}>Complete</option></select>`:rockPill(r.status)}</td><td><div class="flex">${editable?`${r.archived?'':action('rock-issue','→ IDS',r.id)}${action(r.archived?'restore-rock':'archive-rock',r.archived?'Restore':'Archive',r.id)}${editButtons('rock',r.id)}`:''}</div></td></tr>`).join('')}</tbody></table></div>`;
 }
 function renderRocks(embedded = false) {
-  const done=state.rocks.filter(r=>r.status==='done').length;
-  return `${embedded?'':header('Rocks','The few priorities that matter most this quarter.',action('add-rock','+ Add rock','',''))}<section class="card"><div class="card-head"><h2>Quarterly priorities</h2>${embedded?action('add-rock','+ Add rock'):pill(`${done} of ${state.rocks.length} complete`,'gray')}</div>${rocksTable()}</section><p class="hint">On track or off track — keep the review short. If a rock needs a conversation, add it to the Issues List.</p>`;
+  const rocks=embedded?state.rocks.filter(r=>!r.archived && r.status!=='done'):state.rocks.filter(r=>r.archived===(rockFilter==='archived'));
+  const done=rocks.filter(r=>r.status==='done').length;
+  const emptyState=rockFilter==='archived'?'No archived rocks':'Focus on the big things';
+  return `${embedded?'':header('Rocks','The few priorities that matter most this quarter.',action('add-rock','+ Add rock','',''))}${embedded?'':`<div class="toolbar"><div class="tabs">${[['active','Active'],['archived','Archived']].map(([key,label])=>`<button class="tab ${rockFilter===key?'active':''}" data-rock-filter="${key}">${label}</button>`).join('')}</div></div>`}<section class="card"><div class="card-head"><h2>${rockFilter==='archived'&&!embedded?'Archived rocks':'Quarterly priorities'}</h2>${embedded?'':pill(`${done} of ${rocks.length} complete`,'gray')}</div>${rocks.length?rocksTable(rocks):empty(emptyState,rockFilter==='archived'?'Rocks you archive will be kept here.':'Define the most important outcomes for this quarter, with one accountable owner each.',rockFilter==='active'&&!embedded?action('add-rock','Add a rock'):'')}</section><p class="hint">On track or off track — keep the review short. If a rock needs a conversation, add it to the Issues List.</p>`;
 }
 
 function todosTable(todos = state.todos, editable = true, members = state.members) {
@@ -463,6 +465,8 @@ const handlers = {
   'save-meeting-notes':()=>{const captured=captureDrafts();mutate(next=>applyDrafts(next,captured));},
   'save-conclusion':()=>{const captured=captureDrafts();mutate(next=>applyDrafts(next,captured));},
   'finish-meeting':finishMeeting,
+  'archive-rock':item=>mutate(next=>{const rock=next.rocks.find(rock=>rock.id===item);if(rock)rock.archived=true;},'Rock archived'),
+  'restore-rock':item=>mutate(next=>{const rock=next.rocks.find(rock=>rock.id===item);if(rock)rock.archived=false;},'Rock restored'),
   'metric-issue':item=>sendToIDS('metric',item), 'rock-issue':item=>sendToIDS('rock',item), 'headline-issue':item=>sendToIDS('headline',item),
   'select-issue':item=>{selectedIssue=item;render();}, 'close-issue':()=>{selectedIssue='';render();},
   'toggle-chosen-issue':item=>mutate(next=>{const m=next.meetings.find(m=>!m.endedAt);if(!m)throw new Error('Start a meeting before choosing focus issues.');m.chosenIssueIds=m.chosenIssueIds || [];if(m.chosenIssueIds.includes(item))m.chosenIssueIds=m.chosenIssueIds.filter(id=>id!==item);else {if(m.chosenIssueIds.length>=3)throw new Error('Clear or unchoose an issue before choosing another.');m.chosenIssueIds.push(item);}},''),
@@ -498,6 +502,7 @@ document.addEventListener('click',event=>{
   }
   const stage=event.target.closest('[data-stage]');if(stage)changeStage(Number(stage.dataset.stage));
   const tab=event.target.closest('[data-filter]');if(tab){filter=tab.dataset.filter;render();}
+  const rockTab=event.target.closest('[data-rock-filter]');if(rockTab){rockFilter=rockTab.dataset.rockFilter;render();}
 });
 document.addEventListener('change',event=>{
   if(event.target.id==='team-select'){switchTeam(event.target.value).catch(e=>toast(e.message,true));return;}

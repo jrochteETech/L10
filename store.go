@@ -51,6 +51,7 @@ type Rock struct {
 	Assignees []string `json:"assignees"`
 	Due       string   `json:"due"`
 	Status    string   `json:"status"`
+	Archived  bool     `json:"archived"`
 }
 type Todo struct {
 	ID          string   `json:"id"`
