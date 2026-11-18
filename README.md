@@ -5,6 +5,7 @@ A self-hosted EOS Level 10 meeting workspace. Go backend; vanilla JavaScript, HT
 ## Features
 
 - Multiple teams with independent scorecards, quarterly rocks, to-dos, headlines, Issues Lists, and meeting history.
+- **My work** aggregates the logged-in user's owned or assigned measurables, rocks, open to-dos and issues, headlines, and meetings across every team they belong to.
 - Individual username/password accounts; users can belong to multiple teams.
 - Administrators create users and teams, manage memberships, reset passwords, and disable accounts. New users receive the temporary password `password!!` and must replace it at first sign-in. Members can collaborate in their assigned teams. Administrators can access all teams.
 - Multiple assigned users on every measurable, rock, to-do, issue, and headline. An optional primary owner provides accountability.

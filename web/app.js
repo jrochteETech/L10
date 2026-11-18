@@ -20,8 +20,8 @@ const stages = [
   {name:'IDS', minutes:60, description:'Identify the root issue, discuss openly, and solve it. Start with your most important issues and turn decisions into accountable actions.'},
   {name:'Conclude', minutes:5, description:'Recap the to-dos, agree on cascading messages, and have each attendee rate this meeting from 1 to 10.'}
 ];
-const navigation = [ ['overview','◈','Overview'], ['meeting','◷','L10 meeting'], ['scorecard','▥','Scorecard'], ['rocks','◇','Rocks'], ['todos','☑','To-dos'], ['issues','≡','Issues / IDS'], ['headlines','▤','Headlines'], ['history','↺','Meeting history'], ['settings','⚙','Team & settings'] ];
-let state, currentUser, environment = 'production', teams = [], users = [], setupRequired = false, passwordRequired = true, saving = false, saveQueue = Promise.resolve(), filter = 'open', rockFilter = 'active', search = '', selectedIssue = '', selectedHistory = '', toastTimeout;
+const navigation = [ ['overview','◈','Overview'], ['my-work','◎','My work'], ['meeting','◷','L10 meeting'], ['scorecard','▥','Scorecard'], ['rocks','◇','Rocks'], ['todos','☑','To-dos'], ['issues','≡','Issues / IDS'], ['headlines','▤','Headlines'], ['history','↺','Meeting history'], ['settings','⚙','Team & settings'] ];
+let state, currentUser, environment = 'production', teams = [], users = [], personalItems = [], setupRequired = false, passwordRequired = true, saving = false, saveQueue = Promise.resolve(), filter = 'open', rockFilter = 'active', search = '', selectedIssue = '', selectedHistory = '', toastTimeout;
 const tableSorts = {};
 const activeMeeting = () => state.meetings.find(m=>!m.endedAt);
 const plannedMinutes = () => stages.reduce((total,stage)=>total+stage.minutes,0);
@@ -93,6 +93,7 @@ function mutate(change, message = 'Changes saved') {
       change(next);
       state = await api(`teams/${next.id}/state`, {method:'PUT', body:JSON.stringify(next)});
       applyStageMinutes();
+      personalItems = await api('my-work');
       render(); if (message) toast(message);
       return true;
     } catch (error) {
@@ -119,8 +120,8 @@ const rockPill = status => status==='done'?pill('Complete'):status==='off-track'
 function render() {
   if (!state) { renderNoTeams(); return; }
   const current = navigation.find(n=>n[0]===route()) ? route() : 'overview';
-  const views = {overview:renderOverview, meeting:renderMeeting, scorecard:()=>renderScorecard(), rocks:()=>renderRocks(), todos:()=>renderTodos(), issues:()=>renderIssues(), headlines:()=>renderHeadlines(), history:renderHistory, settings:renderSettings};
-  $('#app').innerHTML = `<div class="layout"><aside class="sidebar"><a class="brand" href="#overview"><img class="brand-mark" src="/E%20Tech%20Group%20-%20Mark%20-%20Full%20Color%20-%20Background.png" alt="E Tech Group"><span>Level Ten<small>MAKE EVERY WEEK COUNT</small></span></a><div class="team-selector"><label for="team-select" class="team-label">Active team</label><select id="team-select" aria-label="Switch team">${teams.map(t=>`<option value="${esc(t.id)}" ${state.id===t.id?'selected':''}>${esc(t.name)}</option>`).join('')}</select>${currentUser.role==='admin'?'<button class="text-btn" data-action="create-team">+ Create team</button>':''}</div><nav class="nav" aria-label="Main navigation">${navigation.map(([key,icon,label])=>`<a href="#${key}" class="${key===current?'active':''}" ${key===current?'aria-current="page"':''}><span class="nav-icon" aria-hidden="true">${icon}</span>${label}${key==='issues' && state.issues.some(i=>i.status==='open')?`<span class="nav-count">${state.issues.filter(i=>i.status==='open').length}</span>`:''}${key==='meeting' && activeMeeting()?'<span class="nav-count">LIVE</span>':''}</a>`).join('')}</nav><div class="sidebar-bottom"><div class="team-card"><strong>${esc(currentUser.name)}</strong><small>${currentUser.role==='admin'?'Administrator':'Team member'} · ${teams.length} teams</small></div></div></aside><main class="main"><div class="topbar"><div class="breadcrumb">${esc(state.name)} <span>/ ${esc(navigation.find(n=>n[0]===current)[2])}</span></div><div class="top-actions"><span id="save-status" class="save-status"></span><button class="icon-btn" data-action="refresh" aria-label="Refresh workspace" title="Refresh workspace">↻</button><button class="text-btn" data-action="logout">Sign out</button><span class="avatar" title="${esc(currentUser.name)}">${esc(initials(currentUser.name))}</span></div></div><div class="content">${views[current]()}<div class="footer-note">LEVEL TEN · Clarity. Accountability. Traction.</div></div></main></div>`;
+  const views = {overview:renderOverview, 'my-work':renderMyWork, meeting:renderMeeting, scorecard:()=>renderScorecard(), rocks:()=>renderRocks(), todos:()=>renderTodos(), issues:()=>renderIssues(), headlines:()=>renderHeadlines(), history:renderHistory, settings:renderSettings};
+  $('#app').innerHTML = `<div class="layout"><aside class="sidebar"><a class="brand" href="#overview"><img class="brand-mark" src="/E%20Tech%20Group%20-%20Mark%20-%20Full%20Color%20-%20Background.png" alt="E Tech Group"><span>Level Ten<small>MAKE EVERY WEEK COUNT</small></span></a><div class="team-selector"><label for="team-select" class="team-label">Active team</label><select id="team-select" aria-label="Switch team">${teams.map(t=>`<option value="${esc(t.id)}" ${state.id===t.id?'selected':''}>${esc(t.name)}</option>`).join('')}</select>${currentUser.role==='admin'?'<button class="text-btn" data-action="create-team">+ Create team</button>':''}</div><nav class="nav" aria-label="Main navigation">${navigation.map(([key,icon,label])=>`<a href="#${key}" class="${key===current?'active':''}" ${key===current?'aria-current="page"':''}><span class="nav-icon" aria-hidden="true">${icon}</span>${label}${key==='issues' && state.issues.some(i=>i.status==='open')?`<span class="nav-count">${state.issues.filter(i=>i.status==='open').length}</span>`:''}${key==='meeting' && activeMeeting()?'<span class="nav-count">LIVE</span>':''}</a>`).join('')}</nav><div class="sidebar-bottom"><div class="team-card"><strong>${esc(currentUser.name)}</strong><small>${currentUser.role==='admin'?'Administrator':'Team member'} · ${teams.length} teams</small></div></div></aside><main class="main"><div class="topbar"><div class="breadcrumb">${current==='my-work'?'All teams':esc(state.name)} <span>/ ${esc(navigation.find(n=>n[0]===current)[2])}</span></div><div class="top-actions"><span id="save-status" class="save-status"></span><button class="icon-btn" data-action="refresh" aria-label="Refresh workspace" title="Refresh workspace">↻</button><button class="text-btn" data-action="logout">Sign out</button><span class="avatar" title="${esc(currentUser.name)}">${esc(initials(currentUser.name))}</span></div></div><div class="content">${views[current]()}<div class="footer-note">LEVEL TEN · Clarity. Accountability. Traction.</div></div></main></div>`;
   sortUserLists($('#app')); decorateAssignments(); decoratePlannedTime(); decorateAgendaSettings(); updateSaveStatus(); updateTimer();
 }
 
@@ -175,6 +176,38 @@ function renderOverview() {
     <section class="hero"><div><div class="eyebrow">90 minutes. One focused team.</div><h2>${meeting?'Your meeting is in progress.':'Better meetings start here.'}</h2><p>${meeting?`You’re on ${esc(stages[meeting.stage].name)}. Keep the conversation focused and turn your biggest issues into clear next steps.`:'The same agenda, every week. Check the numbers, review your priorities, and spend the real time solving issues together.'}</p>${action(meeting?'resume':'start-meeting',meeting?'Continue your L10 →':'Let’s get started →','','lime')}<div class="agenda-preview">${stages.map(s=>`<span>${s.name} · ${s.minutes}m</span>`).join('')}</div></div><div class="hero-art"><div><strong>90</strong><small>MINUTES</small></div></div></section>
     <div class="stats"><div class="stat"><span class="label">Weekly scorecard</span><strong>${good}<span class="muted"> / ${state.metrics.length}</span></strong><small>${measured.length} reported · week of ${shortDate(week)}</small></div><div class="stat"><span class="label">Active rocks on track</span><strong>${rocks.filter(r=>r.status==='on-track').length}<span class="muted"> / ${rocks.length}</span></strong><small>Your quarterly priorities</small></div><div class="stat"><span class="label">Open to-dos</span><strong>${todos.length}</strong><small>${todos.filter(t=>t.due && t.due<today()).length} overdue commitments</small></div><div class="stat"><span class="label">Last meeting rating</span><strong>${last?meetingAverage(last):'—'}<span class="muted"> / 10</span></strong><small>${last?dateLabel(last.startedAt):'Your first L10 is ahead'}</small></div></div>
     <div class="grid two"><section class="card"><div class="card-head"><h2>What needs your attention</h2><a class="text-btn" href="#issues">View issues →</a></div>${issues.length?issues.slice(0,5).map(i=>`<div class="list-row"><span class="priority">P${i.priority}</span><div class="grow"><div class="row-title">${esc(i.title)}</div><div class="row-meta">${esc(memberName(i.owner))}</div></div>${pill('Open','gray')}</div>`).join(''):empty('A clear Issues List','Capture the obstacles, ideas, and opportunities your team needs to solve.',action('add-issue','Add an issue'))}</section><section class="card"><div class="card-head"><h2>This week’s commitments</h2><a class="text-btn" href="#todos">View to-dos →</a></div>${todos.length?todos.slice(0,5).map(t=>`<div class="list-row"><input class="check" type="checkbox" data-todo="${esc(t.id)}" aria-label="Complete ${esc(t.title)}"><div class="grow"><div class="row-title">${esc(t.title)}</div><div class="row-meta">${esc(memberName(t.owner))} · ${dateLabel(t.due)}</div></div>${t.due && t.due<today()?pill('Overdue','red'):''}</div>`).join(''):empty('Make the next step clear','Every action has one owner and a due date. Keep your commitments small and achievable.',action('add-todo','Add a to-do'))}</section></div>`;
+}
+
+function renderMyWork() {
+  const typeLabels={metric:'Measurable',rock:'Rock',todo:'To-do',issue:'Issue',headline:'Headline',meeting:'Meeting'};
+  const statusTag=item=>{
+    if(item.type==='todo'&&item.due&&item.due<today())return pill('Overdue','red');
+    if(item.type==='issue')return pill(`P${item.priority}`,'gray');
+    if(item.type==='rock'){
+      if(item.status==='off-track')return pill('Off track','red');
+      if(item.status==='done')return pill('Complete');
+      return pill('On track');
+    }
+    if(item.type==='meeting')return item.status==='concluded'?pill('Concluded','gray'):pill('In progress');
+    if(item.type==='headline')return pill(item.status==='customer'?'Customer':'Employee','gray');
+    return '';
+  };
+  const typeOrder=['metric','rock','todo','issue','headline','meeting'];
+  const byType=new Map(typeOrder.map(type=>[type,personalItems.filter(item=>item.type===type)]));
+  const teamNames=[...new Set(personalItems.map(item=>item.teamName))];
+  return `${header('My work',`Everything assigned to you across ${teamNames.length} ${teamNames.length===1?'team':'teams'}.`)}
+    <div class="stats"><div class="stat"><span class="label">Open items</span><strong>${personalItems.filter(i=>i.type!=='headline'&&i.type!=='meeting').length}</strong><small>Across all your teams</small></div><div class="stat"><span class="label">Teams</span><strong>${teamNames.length}</strong><small>You belong to ${teams.length} teams</small></div><div class="stat"><span class="label">To-dos</span><strong>${personalItems.filter(i=>i.type==='todo').length}</strong><small>Open commitments</small></div><div class="stat"><span class="label">Issues</span><strong>${personalItems.filter(i=>i.type==='issue').length}</strong><small>Open issues to solve</small></div></div>
+    ${personalItems.length?`<div class="my-work-grid">${typeOrder.filter(type=>byType.get(type).length).map(type=>{
+      const items=byType.get(type).slice().sort((a,b)=>a.teamName.localeCompare(b.teamName,undefined,{sensitivity:'base'}) || String(a.title||'').localeCompare(String(b.title||''),undefined,{sensitivity:'base'}));
+      return `<section class="card"><div class="card-head"><h2>${esc(typeLabels[type])}</h2>${pill(`${items.length} ${items.length===1?'item':'items'}`,'gray')}</div>${items.map(item=>{
+        const status=statusTag(item);
+        const detail=item.type==='todo'||item.type==='rock'?`Due ${dateLabel(item.due)}`:item.type==='meeting'?dateLabel(item.startedAt):item.type==='headline'?dateLabel(item.createdAt):typeLabels[item.type];
+        const actionButtons=item.type==='meeting'
+          ? `<button class="btn secondary small" data-action="open-my-work-meeting" data-id="${esc(item.id)}" data-team="${esc(item.teamId)}">${item.status==='concluded'?'View report':'Open meeting'} →</button>`
+          : `<button class="btn secondary small" data-action="edit-my-work" data-id="${esc(item.id)}" data-type="${esc(item.type)}" data-team="${esc(item.teamId)}">Edit</button><button class="icon-btn" data-action="open-my-work-team" data-id="${esc(item.teamId)}" aria-label="Open team" title="Open team">↗</button>`;
+        return `<div class="list-row"><div class="grow"><div class="row-title">${esc(item.title)}</div><div class="row-meta">${esc(detail)}</div><div class="my-work-team-tag">${esc(item.teamName)}</div></div>${status}<div class="flex wrap">${actionButtons}</div></div>`;
+      }).join('')}</section>`;
+    }).join('')}</div>`:empty('Nothing assigned to you','You have no owner or assignee items across your teams yet.')}`;
 }
 
 function scorecardTable(metrics = state.metrics, editable = true, members = state.members, weekList = weeks()) {
@@ -287,6 +320,7 @@ function assignmentHTML(item,members=state.members) {
 }
 async function loadWorkspace(preferred) {
   teams=await api('teams');users=currentUser.role==='admin'?await api('users'):[];
+  personalItems=await api('my-work');
   const chosen=teams.find(t=>t.id===(preferred || localStorage.getItem('l10-team'))) || teams[0];
   state=chosen?await api(`teams/${chosen.id}/state`):null;
   if(state){applyStageMinutes();localStorage.setItem('l10-team',state.id);}
@@ -294,6 +328,22 @@ async function loadWorkspace(preferred) {
 async function switchTeam(teamID) {
   const captured=captureDrafts();if(state && Object.keys(captured.drafts).length){const ok=await mutate(next=>applyDrafts(next,captured),'');if(!ok)return;}
   await saveQueue;await loadWorkspace(teamID);selectedIssue='';selectedHistory='';search='';filter='open';render();
+}
+async function editMyWorkItem(teamID, itemType, itemID) {
+  await saveQueue;
+  state=await api(`teams/${teamID}/state`);
+  applyStageMinutes();
+  localStorage.setItem('l10-team',teamID);
+  editItem(itemType,itemID);
+}
+async function openMyWorkMeeting(teamID, meetingID) {
+  await saveQueue;
+  state=await api(`teams/${teamID}/state`);
+  applyStageMinutes();
+  localStorage.setItem('l10-team',teamID);
+  selectedHistory=meetingID;
+  location.hash=state.meetings.find(meeting=>meeting.id===meetingID)?.endedAt?'history':'meeting';
+  render();
 }
 function renderNoTeams() {
   $('#app').innerHTML=`<div class="login"><div class="login-box"><h1>Welcome, ${esc(currentUser?.name)}.</h1><p>You don’t have a team yet. Ask an administrator to add you to a team.</p>${currentUser?.role==='admin'?action('create-team','Create a team'):''}${action('logout','Sign out')}</div></div>`;
@@ -457,6 +507,17 @@ function finishMeeting() {
 
 const handlers = {
   'start-meeting':startMeeting, resume:()=>{location.hash='meeting';render();},
+  'edit-my-work':item=>{
+    const button=[...document.querySelectorAll('[data-action="edit-my-work"]')].find(element=>element.dataset.id===item);
+    if(!button)return;
+    return editMyWorkItem(button.dataset.team,button.dataset.type,item);
+  },
+  'open-my-work-team':item=>switchTeam(item),
+  'open-my-work-meeting':item=>{
+    const button=[...document.querySelectorAll('[data-action="open-my-work-meeting"]')].find(element=>element.dataset.id===item);
+    if(!button)return;
+    return openMyWorkMeeting(button.dataset.team,item);
+  },
   refresh:async()=>{await saveQueue;try{await loadWorkspace(state?.id);render();toast('Workspace refreshed');}catch(e){toast(e.message,true);}},
   logout:async()=>{try{await api('logout',{method:'POST',body:'{}'});state=null;renderLogin();}catch(e){toast(e.message,true);}},
   'toggle-timer':()=>{const captured=captureDrafts();mutate(next=>{applyDrafts(next,captured);const m=next.meetings.find(m=>!m.endedAt);if(!m)throw new Error('No active meeting.');if(m.timerStartedAt)settleTimer(m);else m.timerStartedAt=now();},'');},

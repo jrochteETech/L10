@@ -125,6 +125,7 @@ func (a *application) routes() http.Handler {
 	mux.HandleFunc("POST /api/logout", a.logout)
 	mux.HandleFunc("POST /api/password", a.authenticated(a.changePassword))
 	mux.HandleFunc("GET /api/teams", a.protected(a.listTeams))
+	mux.HandleFunc("GET /api/my-work", a.protected(a.listMyWork))
 	mux.HandleFunc("POST /api/teams", a.admin(a.createTeam))
 	mux.HandleFunc("PUT /api/teams/{team}/members", a.admin(a.setMembers))
 	mux.HandleFunc("GET /api/teams/{team}/state", a.protected(a.getState))

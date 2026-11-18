@@ -17,6 +17,64 @@ func (a *application) listTeams(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, 200, result)
 }
+func (a *application) listMyWork(w http.ResponseWriter, r *http.Request) {
+	u, _ := a.currentUser(r)
+	items := []map[string]any{}
+	related := func(owner string, assignees []string) bool {
+		if owner == u.ID {
+			return true
+		}
+		for _, id := range assignees {
+			if id == u.ID {
+				return true
+			}
+		}
+		return false
+	}
+	for _, t := range requestDatabase(r).Teams {
+		if !canAccess(u, t) {
+			continue
+		}
+		for _, m := range t.Metrics {
+			if related(m.Owner, m.Assignees) {
+				items = append(items, map[string]any{"type": "metric", "teamId": t.ID, "teamName": t.Name, "id": m.ID, "title": m.Name, "status": "active", "owner": m.Owner})
+			}
+		}
+		for _, rock := range t.Rocks {
+			if related(rock.Owner, rock.Assignees) && !rock.Archived {
+				items = append(items, map[string]any{"type": "rock", "teamId": t.ID, "teamName": t.Name, "id": rock.ID, "title": rock.Title, "status": rock.Status, "due": rock.Due, "owner": rock.Owner})
+			}
+		}
+		for _, todo := range t.Todos {
+			if related(todo.Owner, todo.Assignees) && !todo.Done {
+				items = append(items, map[string]any{"type": "todo", "teamId": t.ID, "teamName": t.Name, "id": todo.ID, "title": todo.Title, "status": "open", "due": todo.Due, "owner": todo.Owner})
+			}
+		}
+		for _, issue := range t.Issues {
+			if related(issue.Owner, issue.Assignees) && issue.Status == "open" {
+				items = append(items, map[string]any{"type": "issue", "teamId": t.ID, "teamName": t.Name, "id": issue.ID, "title": issue.Title, "status": "open", "priority": issue.Priority, "owner": issue.Owner})
+			}
+		}
+		for _, headline := range t.Headlines {
+			if related("", headline.Assignees) {
+				items = append(items, map[string]any{"type": "headline", "teamId": t.ID, "teamName": t.Name, "id": headline.ID, "title": headline.Title, "status": headline.Kind, "createdAt": headline.CreatedAt})
+			}
+		}
+		for _, meeting := range t.Meetings {
+			for _, attendee := range meeting.Attendees {
+				if attendee == u.ID {
+					status := "in-progress"
+					if meeting.EndedAt != "" {
+						status = "concluded"
+					}
+					items = append(items, map[string]any{"type": "meeting", "teamId": t.ID, "teamName": t.Name, "id": meeting.ID, "title": meeting.StartedAt, "status": status, "startedAt": meeting.StartedAt})
+					break
+				}
+			}
+		}
+	}
+	writeJSON(w, 200, items)
+}
 func (a *application) createTeam(w http.ResponseWriter, r *http.Request) {
 	var input struct {
 		Name    string   `json:"name"`
