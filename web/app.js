@@ -93,6 +93,7 @@ function mutate(change, message = 'Changes saved') {
       change(next);
       state = await api(`teams/${next.id}/state`, {method:'PUT', body:JSON.stringify(next)});
       applyStageMinutes();
+      personalItems = await api('my-work');
       render(); if (message) toast(message);
       return true;
     } catch (error) {
@@ -179,21 +180,22 @@ function renderOverview() {
 
 function renderMyWork() {
   const typeLabels={metric:'Measurable',rock:'Rock',todo:'To-do',issue:'Issue',headline:'Headline',meeting:'Meeting'};
-  const grouped=personalItems.slice().sort((a,b)=>{
-    const team=a.teamName.localeCompare(b.teamName,undefined,{sensitivity:'base'});
-    if(team)return team;
-    return a.type.localeCompare(b.type);
-  });
-  const byTeam=new Map();
-  for(const item of grouped){ if(!byTeam.has(item.teamName))byTeam.set(item.teamName,[]); byTeam.get(item.teamName).push(item); }
-  const teamCount=byTeam.size;
-  return `${header('My work',`Everything assigned to you across ${teamCount} ${teamCount===1?'team':'teams'}.`)}
-    <div class="stats"><div class="stat"><span class="label">Open items</span><strong>${personalItems.filter(i=>i.type!=='headline'&&i.type!=='meeting').length}</strong><small>Across all your teams</small></div><div class="stat"><span class="label">Teams</span><strong>${teamCount}</strong><small>You belong to ${teams.length} teams</small></div><div class="stat"><span class="label">To-dos</span><strong>${personalItems.filter(i=>i.type==='todo').length}</strong><small>Open commitments</small></div><div class="stat"><span class="label">Issues</span><strong>${personalItems.filter(i=>i.type==='issue').length}</strong><small>Open issues to solve</small></div></div>
-    ${teamCount?`<div class="my-work-grid">${[...byTeam.entries()].map(([teamName,items])=>`<section class="card"><div class="card-head"><h2>${esc(teamName)}</h2>${pill(`${items.length} items`,'gray')}</div>${items.map(item=>{
-      const status=item.type==='todo'&&item.due&&item.due<today()?pill('Overdue','red'):item.type==='issue'?pill(`P${item.priority}`,'gray'):item.status&&item.status!== 'active'?pill(item.status==='off-track'?'Off track':item.status==='in-progress'?'In progress':item.status==='concluded'?'Concluded':item.status==='customer'?'Customer':'Employee',item.status==='off-track'?'red':'gray'):'';
-      const detail=item.type==='todo'||item.type==='rock'?`Due ${dateLabel(item.due)}`:item.type==='meeting'?dateLabel(item.startedAt):item.type==='headline'?dateLabel(item.createdAt):typeLabels[item.type];
-      return `<div class="list-row"><div class="grow"><div class="row-title">${esc(item.title)}</div><div class="row-meta">${esc(typeLabels[item.type])} · ${esc(detail)}</div></div>${status}<button class="btn secondary small" data-switch-team="${esc(item.teamId)}">Open team →</button></div>`;
-    }).join('')}</section>`).join('')}</div>`:empty('Nothing assigned to you','You have no owner or assignee items across your teams yet.')}`;
+  const typeOrder=['metric','rock','todo','issue','headline','meeting'];
+  const byType=new Map(typeOrder.map(type=>[type,personalItems.filter(item=>item.type===type)]));
+  const teamNames=[...new Set(personalItems.map(item=>item.teamName))];
+  return `${header('My work',`Everything assigned to you across ${teamNames.length} ${teamNames.length===1?'team':'teams'}.`)}
+    <div class="stats"><div class="stat"><span class="label">Open items</span><strong>${personalItems.filter(i=>i.type!=='headline'&&i.type!=='meeting').length}</strong><small>Across all your teams</small></div><div class="stat"><span class="label">Teams</span><strong>${teamNames.length}</strong><small>You belong to ${teams.length} teams</small></div><div class="stat"><span class="label">To-dos</span><strong>${personalItems.filter(i=>i.type==='todo').length}</strong><small>Open commitments</small></div><div class="stat"><span class="label">Issues</span><strong>${personalItems.filter(i=>i.type==='issue').length}</strong><small>Open issues to solve</small></div></div>
+    ${personalItems.length?`<div class="my-work-grid">${typeOrder.filter(type=>byType.get(type).length).map(type=>{
+      const items=byType.get(type).slice().sort((a,b)=>a.teamName.localeCompare(b.teamName,undefined,{sensitivity:'base'}) || String(a.title||'').localeCompare(String(b.title||''),undefined,{sensitivity:'base'}));
+      return `<section class="card"><div class="card-head"><h2>${esc(typeLabels[type])}</h2>${pill(`${items.length} ${items.length===1?'item':'items'}`,'gray')}</div>${items.map(item=>{
+        const status=item.type==='todo'&&item.due&&item.due<today()?pill('Overdue','red'):item.type==='issue'?pill(`P${item.priority}`,'gray'):item.status&&item.status!== 'active'?pill(item.status==='off-track'?'Off track':item.status==='in-progress'?'In progress':item.status==='concluded'?'Concluded':item.status==='customer'?'Customer':'Employee',item.status==='off-track'?'red':'gray'):'';
+        const detail=item.type==='todo'||item.type==='rock'?`Due ${dateLabel(item.due)}`:item.type==='meeting'?dateLabel(item.startedAt):item.type==='headline'?dateLabel(item.createdAt):typeLabels[item.type];
+        const actionButtons=item.type==='meeting'
+          ? `<button class="btn secondary small" data-action="open-my-work-meeting" data-id="${esc(item.id)}" data-team="${esc(item.teamId)}">${item.status==='concluded'?'View report':'Open meeting'} →</button>`
+          : `<button class="btn secondary small" data-action="edit-my-work" data-id="${esc(item.id)}" data-type="${esc(item.type)}" data-team="${esc(item.teamId)}">Edit</button><button class="icon-btn" data-action="open-my-work-team" data-id="${esc(item.teamId)}" aria-label="Open team" title="Open team">↗</button>`;
+        return `<div class="list-row"><div class="grow"><div class="row-title">${esc(item.title)}</div><div class="row-meta">${esc(detail)}</div><div class="my-work-team-tag">${esc(item.teamName)}</div></div>${status}<div class="flex wrap">${actionButtons}</div></div>`;
+      }).join('')}</section>`;
+    }).join('')}</div>`:empty('Nothing assigned to you','You have no owner or assignee items across your teams yet.')}`;
 }
 
 function scorecardTable(metrics = state.metrics, editable = true, members = state.members, weekList = weeks()) {
@@ -314,6 +316,22 @@ async function loadWorkspace(preferred) {
 async function switchTeam(teamID) {
   const captured=captureDrafts();if(state && Object.keys(captured.drafts).length){const ok=await mutate(next=>applyDrafts(next,captured),'');if(!ok)return;}
   await saveQueue;await loadWorkspace(teamID);selectedIssue='';selectedHistory='';search='';filter='open';render();
+}
+async function editMyWorkItem(teamID, itemType, itemID) {
+  await saveQueue;
+  state=await api(`teams/${teamID}/state`);
+  applyStageMinutes();
+  localStorage.setItem('l10-team',teamID);
+  editItem(itemType,itemID);
+}
+async function openMyWorkMeeting(teamID, meetingID) {
+  await saveQueue;
+  state=await api(`teams/${teamID}/state`);
+  applyStageMinutes();
+  localStorage.setItem('l10-team',teamID);
+  selectedHistory=meetingID;
+  location.hash=state.meetings.find(meeting=>meeting.id===meetingID)?.endedAt?'history':'meeting';
+  render();
 }
 function renderNoTeams() {
   $('#app').innerHTML=`<div class="login"><div class="login-box"><h1>Welcome, ${esc(currentUser?.name)}.</h1><p>You don’t have a team yet. Ask an administrator to add you to a team.</p>${currentUser?.role==='admin'?action('create-team','Create a team'):''}${action('logout','Sign out')}</div></div>`;
@@ -477,6 +495,17 @@ function finishMeeting() {
 
 const handlers = {
   'start-meeting':startMeeting, resume:()=>{location.hash='meeting';render();},
+  'edit-my-work':item=>{
+    const button=[...document.querySelectorAll('[data-action="edit-my-work"]')].find(element=>element.dataset.id===item);
+    if(!button)return;
+    return editMyWorkItem(button.dataset.team,button.dataset.type,item);
+  },
+  'open-my-work-team':item=>switchTeam(item),
+  'open-my-work-meeting':item=>{
+    const button=[...document.querySelectorAll('[data-action="open-my-work-meeting"]')].find(element=>element.dataset.id===item);
+    if(!button)return;
+    return openMyWorkMeeting(button.dataset.team,item);
+  },
   refresh:async()=>{await saveQueue;try{await loadWorkspace(state?.id);render();toast('Workspace refreshed');}catch(e){toast(e.message,true);}},
   logout:async()=>{try{await api('logout',{method:'POST',body:'{}'});state=null;renderLogin();}catch(e){toast(e.message,true);}},
   'toggle-timer':()=>{const captured=captureDrafts();mutate(next=>{applyDrafts(next,captured);const m=next.meetings.find(m=>!m.endedAt);if(!m)throw new Error('No active meeting.');if(m.timerStartedAt)settleTimer(m);else m.timerStartedAt=now();},'');},
