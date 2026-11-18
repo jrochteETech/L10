@@ -13,6 +13,7 @@
 .agenda-time-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 18px;margin-bottom:20px}.agenda-time-grid .field{margin:0}
 @media(max-width:760px){.agenda-time-grid{grid-template-columns:1fr}}
 #environment-banner{padding:9px 16px;background:#b45309;color:#fff;text-align:center;font-size:12px;font-weight:800;letter-spacing:1px;text-transform:uppercase}#environment-banner[hidden]{display:none}
+.my-work-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px}.my-work-grid .list-row{align-items:flex-start}.my-work-grid .list-row>.grow{padding-top:5px}.my-work-grid .list-row>.btn{margin-left:auto;flex-shrink:0}@media(max-width:760px){.my-work-grid{grid-template-columns:1fr}.my-work-grid .list-row{flex-wrap:wrap}.my-work-grid .list-row>.btn{margin-left:42px}}
 [data-environment="dev"]{--green:#b42318;--lime:#ffbf47;--soft:#fff0d6;--bg:#fff8ed;--line:#ead9c5}
 [data-environment="dev"] .sidebar,[data-environment="dev"] .login{background:#7c2d12}
 [data-environment="dev"] .nav a:hover{background:#963a1b}

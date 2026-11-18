@@ -68,6 +68,45 @@ func (c *testClient) request(method, path string, body any, status int, result a
 		}
 	}
 }
+func TestMyWorkIncludesAssignmentsAcrossAccessibleTeams(t *testing.T) {
+	s, _ := testStore(t)
+	a := newApplication(s)
+	admin := testClient{t: t, handler: a.routes()}
+	member := testClient{t: t, handler: a.routes()}
+
+	var root User
+	admin.request("POST", "/api/setup", map[string]string{"username": "admin", "name": "Administrator", "password": "strong-password-123"}, 201, &root)
+	var bob User
+	admin.request("POST", "/api/users", userInput{Name: "Bob", Username: "bob", Role: "member"}, 201, &bob)
+
+	var first State
+	admin.request("POST", "/api/teams", map[string]any{"name": "Sales", "members": []string{root.ID, bob.ID}}, 201, &first)
+	var second State
+	admin.request("POST", "/api/teams", map[string]any{"name": "Operations", "members": []string{bob.ID}}, 201, &second)
+
+	first.Rocks = []Rock{{ID: "rock-1", Title: "Close pipeline", Owner: bob.ID, Assignees: []string{bob.ID}, Status: "on-track", Due: "2026-12-31"}}
+	first.Todos = []Todo{{ID: "todo-1", Title: "Send proposal", Owner: bob.ID, Assignees: []string{bob.ID}, Due: "2026-12-20"}}
+	admin.request("PUT", "/api/teams/"+first.ID+"/state", first, 200, &first)
+	second.Issues = []Issue{{ID: "issue-1", Title: "Supplier delay", Owner: bob.ID, Assignees: []string{bob.ID}, Priority: 1, Status: "open"}}
+	second.Headlines = []Headline{{ID: "headline-1", Title: "New customer", Kind: "customer", Assignees: []string{bob.ID}, CreatedAt: time.Now().UTC().Format(time.RFC3339Nano)}}
+	admin.request("PUT", "/api/teams/"+second.ID+"/state", second, 200, &second)
+
+	member.request("POST", "/api/login", map[string]string{"username": "bob", "password": defaultUserPassword}, 200, nil)
+	member.request("POST", "/api/password", map[string]string{"current": defaultUserPassword, "password": "bob-password-123"}, 200, nil)
+	var items []map[string]any
+	member.request("GET", "/api/my-work", nil, 200, &items)
+
+	if len(items) != 4 {
+		t.Fatalf("my-work returned %d items, want 4: %v", len(items), items)
+	}
+	teamsSeen := map[string]bool{}
+	for _, item := range items {
+		teamsSeen[item["teamName"].(string)] = true
+	}
+	if !teamsSeen["Sales"] || !teamsSeen["Operations"] {
+		t.Fatalf("my-work did not span both teams: %v", teamsSeen)
+	}
+}
 func TestAccountsTeamsTransfersAndPersistence(t *testing.T) {
 	s, databaseURL := testStore(t)
 	a := newApplication(s)
