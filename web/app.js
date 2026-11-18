@@ -180,6 +180,18 @@ function renderOverview() {
 
 function renderMyWork() {
   const typeLabels={metric:'Measurable',rock:'Rock',todo:'To-do',issue:'Issue',headline:'Headline',meeting:'Meeting'};
+  const statusTag=item=>{
+    if(item.type==='todo'&&item.due&&item.due<today())return pill('Overdue','red');
+    if(item.type==='issue')return pill(`P${item.priority}`,'gray');
+    if(item.type==='rock'){
+      if(item.status==='off-track')return pill('Off track','red');
+      if(item.status==='done')return pill('Complete');
+      return pill('On track');
+    }
+    if(item.type==='meeting')return item.status==='concluded'?pill('Concluded','gray'):pill('In progress');
+    if(item.type==='headline')return pill(item.status==='customer'?'Customer':'Employee','gray');
+    return '';
+  };
   const typeOrder=['metric','rock','todo','issue','headline','meeting'];
   const byType=new Map(typeOrder.map(type=>[type,personalItems.filter(item=>item.type===type)]));
   const teamNames=[...new Set(personalItems.map(item=>item.teamName))];
@@ -188,7 +200,7 @@ function renderMyWork() {
     ${personalItems.length?`<div class="my-work-grid">${typeOrder.filter(type=>byType.get(type).length).map(type=>{
       const items=byType.get(type).slice().sort((a,b)=>a.teamName.localeCompare(b.teamName,undefined,{sensitivity:'base'}) || String(a.title||'').localeCompare(String(b.title||''),undefined,{sensitivity:'base'}));
       return `<section class="card"><div class="card-head"><h2>${esc(typeLabels[type])}</h2>${pill(`${items.length} ${items.length===1?'item':'items'}`,'gray')}</div>${items.map(item=>{
-        const status=item.type==='todo'&&item.due&&item.due<today()?pill('Overdue','red'):item.type==='issue'?pill(`P${item.priority}`,'gray'):item.status&&item.status!== 'active'?pill(item.status==='off-track'?'Off track':item.status==='in-progress'?'In progress':item.status==='concluded'?'Concluded':item.status==='customer'?'Customer':'Employee',item.status==='off-track'?'red':'gray'):'';
+        const status=statusTag(item);
         const detail=item.type==='todo'||item.type==='rock'?`Due ${dateLabel(item.due)}`:item.type==='meeting'?dateLabel(item.startedAt):item.type==='headline'?dateLabel(item.createdAt):typeLabels[item.type];
         const actionButtons=item.type==='meeting'
           ? `<button class="btn secondary small" data-action="open-my-work-meeting" data-id="${esc(item.id)}" data-team="${esc(item.teamId)}">${item.status==='concluded'?'View report':'Open meeting'} →</button>`
